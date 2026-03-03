@@ -1,85 +1,50 @@
 ---
-title: Schema types
-description: Type system for defining and inferring environment variable schemas
+title: EnvSchema
+description: Type definition for environment variable schema objects
 ---
 
-The schema types provide the type system foundation that powers type inference and validation in env-core.
+The `EnvSchema` type defines the structure of environment variable schemas used with the `validateEnv` function.
 
-## SchemaType
-
-The `SchemaType` type represents the valid type constructors that can be used in environment schemas.
-
-### Type definition
-
-```typescript
-type SchemaType = typeof String | typeof Number | typeof Boolean;
-```
-
-### Description
-
-This type restricts schema type definitions to the three supported JavaScript constructor functions. These constructors are used both for type validation at runtime and type inference at compile time.
-
-### Supported types
-
-<ResponseField name="String" type="typeof String">
-  The `String` constructor for string values. Environment variables defined with this type will be validated as strings and typed as `string` in TypeScript.
-</ResponseField>
-
-<ResponseField name="Number" type="typeof Number">
-  The `Number` constructor for numeric values. Environment variables will be converted from strings to numbers and validated that the result is not `NaN`. Typed as `number` in TypeScript.
-</ResponseField>
-
-<ResponseField name="Boolean" type="typeof Boolean">
-  The `Boolean` constructor for boolean values. Only accepts the string values `'true'` or `'false'` (case-sensitive). Typed as `boolean` in TypeScript.
-</ResponseField>
-
-### Examples
-
-```typescript
-import type { SchemaType } from 'env-core';
-
-// Valid SchemaType values
-const stringType: SchemaType = String;
-const numberType: SchemaType = Number;
-const booleanType: SchemaType = Boolean;
-
-// Using in schema
-const schema = {
-  PORT: Number,        // SchemaType
-  NODE_ENV: String,    // SchemaType
-  DEBUG: Boolean,      // SchemaType
-};
-```
-
-## EnvSchema
-
-The `EnvSchema` type defines the structure of environment variable schemas.
-
-### Type definition
+## Type definition
 
 ```typescript
 type EnvSchema = Record<string, EnvSchemaValue<any>>;
 ```
 
-Where `EnvSchemaValue<T>` is defined as:
+<Note>
+  `EnvSchemaValue<T>` is an internal type that accepts either a type constructor (`String`, `Number`, `Boolean`) or an `EnvSchemaItem<T>` object.
+</Note>
 
-```typescript
-type EnvSchemaValue<T> = SchemaType | EnvSchemaItem<T>;
-```
+## Description
 
-### Description
-
-An `EnvSchema` is a record where:
+An `EnvSchema` is a record (object) where:
 - **Keys** are environment variable names (strings)
 - **Values** can be either:
-  - A `SchemaType` constructor (`String`, `Number`, or `Boolean`) for simple required variables
+  - A type constructor (`String`, `Number`, or `Boolean`) for simple required variables
   - An `EnvSchemaItem<T>` object for advanced configuration with defaults and optional fields
 
-### Examples
+## Supported type constructors
 
-#### Simple schema with type constructors
+The schema supports three JavaScript type constructors:
+
+<ResponseField name="String" type="typeof String">
+  For string values. Environment variables defined with this type will be validated as strings and typed as `string` in TypeScript.
+</ResponseField>
+
+<ResponseField name="Number" type="typeof Number">
+  For numeric values. Environment variables will be converted from strings to numbers and validated that the result is not `NaN`. Typed as `number` in TypeScript.
+</ResponseField>
+
+<ResponseField name="Boolean" type="typeof Boolean">
+  For boolean values. Only accepts the string values `'true'` or `'false'` (case-sensitive). Typed as `boolean` in TypeScript.
+</ResponseField>
+
+## Examples
+
+### Simple schema with type constructors
 
 ```typescript
+import { validateEnv } from 'env-core';
 import type { EnvSchema } from 'env-core';
 
 const schema: EnvSchema = {
@@ -87,9 +52,14 @@ const schema: EnvSchema = {
   NODE_ENV: String,
   DEBUG: Boolean,
 };
+
+const env = validateEnv(schema);
+// env.PORT is number
+// env.NODE_ENV is string
+// env.DEBUG is boolean
 ```
 
-#### Schema with mixed definitions
+### Schema with mixed definitions
 
 ```typescript
 import type { EnvSchema } from 'env-core';
@@ -108,7 +78,7 @@ const schema: EnvSchema = {
 };
 ```
 
-#### Creating reusable schema interfaces
+### Creating reusable schema interfaces
 
 ```typescript
 import type { EnvSchema } from 'env-core';
@@ -131,136 +101,19 @@ const dbSchema: DatabaseEnvSchema = {
 };
 ```
 
-## InferSchemaType
+## Type inference
 
-The `InferSchemaType<T>` type infers the TypeScript type from a `SchemaType` constructor.
-
-### Type definition
+When you use `validateEnv` with a schema, TypeScript automatically infers the correct types for each property:
 
 ```typescript
-type InferSchemaType<T> = 
-  T extends typeof String ? string :
-  T extends typeof Number ? number :
-  T extends typeof Boolean ? boolean :
-  never;
-```
-
-### Description
-
-This conditional type maps JavaScript constructors to their corresponding TypeScript primitive types. It's used internally by the type system to provide type-safe environment objects.
-
-### Type mappings
-
-| Input Type | Output Type |
-|------------|-------------|
-| `typeof String` | `string` |
-| `typeof Number` | `number` |
-| `typeof Boolean` | `boolean` |
-| (anything else) | `never` |
-
-### Examples
-
-```typescript
-import type { InferSchemaType } from 'env-core';
-
-// Type inference examples
-type StringType = InferSchemaType<typeof String>;   // string
-type NumberType = InferSchemaType<typeof Number>;   // number
-type BooleanType = InferSchemaType<typeof Boolean>; // boolean
-```
-
-### Usage in type-safe helpers
-
-```typescript
-import type { InferSchemaType, SchemaType } from 'env-core';
-
-function getDefaultValue<T extends SchemaType>(
-  type: T
-): InferSchemaType<T> | undefined {
-  if (type === String) return '' as InferSchemaType<T>;
-  if (type === Number) return 0 as InferSchemaType<T>;
-  if (type === Boolean) return false as InferSchemaType<T>;
-}
-```
-
-## InferType
-
-The `InferType<T>` type infers the TypeScript type from either a `SchemaType` or an `EnvSchemaItem`.
-
-### Type definition
-
-```typescript
-type InferType<T> = 
-  T extends SchemaType ? InferSchemaType<T> :
-  T extends EnvSchemaItem<infer U> ? U :
-  never;
-```
-
-### Description
-
-This utility type handles both forms of schema value definitions:
-1. **Direct constructors**: Uses `InferSchemaType` to map the constructor to a primitive type
-2. **Schema items**: Extracts the type parameter from `EnvSchemaItem<U>`
-
-This is the key type that enables `ValidatedEnv` to correctly infer types for all schema properties.
-
-### Type inference logic
-
-<Expandable title="For direct constructors">
-  When the schema value is a constructor (`String`, `Number`, `Boolean`), it uses `InferSchemaType` to map to the primitive type.
-  
-  ```typescript
-  type T1 = InferType<typeof String>;   // string
-  type T2 = InferType<typeof Number>;   // number
-  type T3 = InferType<typeof Boolean>;  // boolean
-  ```
-</Expandable>
-
-<Expandable title="For schema items">
-  When the schema value is an `EnvSchemaItem<T>`, it extracts the type parameter `T`.
-  
-  ```typescript
-  type Item = { type: typeof Number; default: number };
-  type T = InferType<Item>; // number
-  ```
-</Expandable>
-
-### Examples
-
-```typescript
-import type { InferType } from 'env-core';
-
-// Simple constructor
-type Port = InferType<typeof Number>; // number
-
-// Schema item with default
-type Debug = InferType<{
-  type: typeof Boolean;
-  default: boolean;
-}>; // boolean
-
-// Schema item without default
-type Host = InferType<{
-  type: typeof String;
-  required: false;
-}>; // string
-```
-
-### How it powers ValidatedEnv
-
-```typescript
-type ValidatedEnv<T extends EnvSchema> = {
-  [K in keyof T]: InferType<T[K]>
-};
-
-// Example schema
 const schema = {
-  PORT: Number,                              // InferType → number
-  NODE_ENV: String,                          // InferType → string
-  DEBUG: { type: Boolean, default: false },  // InferType → boolean
-};
+  PORT: Number,                              // inferred as number
+  NODE_ENV: String,                          // inferred as string
+  DEBUG: { type: Boolean, default: false },  // inferred as boolean
+} satisfies EnvSchema;
 
-// ValidatedEnv<typeof schema> =
+const env = validateEnv(schema);
+// env has type:
 // {
 //   PORT: number;
 //   NODE_ENV: string;
@@ -268,58 +121,11 @@ const schema = {
 // }
 ```
 
-## Type system flow
-
-Here's how the types work together to provide end-to-end type safety:
-
-```typescript
-// 1. Define schema with SchemaType constructors and EnvSchemaItems
-const schema = {
-  PORT: Number,                              // SchemaType
-  DEBUG: { type: Boolean, default: false },  // EnvSchemaItem<boolean>
-} satisfies EnvSchema;                       // EnvSchema
-
-// 2. InferType processes each schema value:
-//    PORT: Number → InferSchemaType<typeof Number> → number
-//    DEBUG: { type: Boolean, ... } → boolean
-
-// 3. ValidatedEnv creates the final type:
-type Result = ValidatedEnv<typeof schema>;
-// {
-//   PORT: number;
-//   DEBUG: boolean;
-// }
-
-// 4. validateEnv returns this type
-const env = validateEnv(schema);
-// env.PORT is number
-// env.DEBUG is boolean
-```
-
 ## Advanced patterns
 
-### Conditional schema types
-
-```typescript
-import type { EnvSchema, ValidatedEnv } from 'env-core';
-
-type CreateSchema<T extends 'development' | 'production'> = T extends 'development'
-  ? {
-      NODE_ENV: typeof String;
-      DEBUG: { type: typeof Boolean; default: boolean };
-    }
-  : {
-      NODE_ENV: typeof String;
-      API_KEY: typeof String;
-    };
-
-const devSchema = {
-  NODE_ENV: String,
-  DEBUG: { type: Boolean, default: true },
-} satisfies CreateSchema<'development'>;
-```
-
 ### Schema composition
+
+Combine multiple schemas using object spread:
 
 ```typescript
 import type { EnvSchema } from 'env-core';
@@ -342,3 +148,65 @@ const fullSchema = {
 const env = validateEnv(fullSchema);
 // env has all properties from both schemas
 ```
+
+### Conditional schema types
+
+Create schemas that vary based on environment:
+
+```typescript
+import type { EnvSchema, ValidatedEnv } from 'env-core';
+
+type CreateSchema<T extends 'development' | 'production'> = T extends 'development'
+  ? {
+      NODE_ENV: typeof String;
+      DEBUG: { type: typeof Boolean; default: boolean };
+    }
+  : {
+      NODE_ENV: typeof String;
+      API_KEY: typeof String;
+    };
+
+const devSchema = {
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: true },
+} satisfies CreateSchema<'development'>;
+```
+
+### Exporting typed schemas
+
+Export your schema and its type for reuse across your application:
+
+```typescript
+// envSchema.ts
+import type { EnvSchema, ValidatedEnv } from 'env-core';
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+} as const satisfies EnvSchema;
+
+// Export the inferred type
+export type Env = ValidatedEnv<typeof envSchema>;
+```
+
+```typescript
+// app.ts
+import { validateEnv } from 'env-core';
+import { envSchema, type Env } from './envSchema';
+
+const env = validateEnv(envSchema);
+
+// Use the Env type in other functions
+function startServer(config: Env) {
+  console.log(`Starting server on port ${config.PORT}`);
+}
+
+startServer(env);
+```
+
+## See also
+
+- [EnvSchemaItem](/api/types#envschemaitem) - For detailed configuration options
+- [ValidatedEnv](/api/types#validatedenv) - For the return type of `validateEnv`
+- [validateEnv](/api/validate-env) - For using schemas with the validation function

@@ -13,13 +13,13 @@ The `ValidatedEnv<T>` type represents the validated and type-safe environment ob
 
 ```typescript
 type ValidatedEnv<T extends EnvSchema> = {
-  [K in keyof T]: InferType<T[K]>
+  [K in keyof T]: /* inferred type based on schema */
 };
 ```
 
 ### Description
 
-This mapped type transforms an `EnvSchema` into an object with properly typed values. For each key in the schema, it infers the correct TypeScript type based on the schema definition.
+This mapped type transforms an `EnvSchema` into an object with properly typed values. For each key in the schema, it infers the correct TypeScript type based on the schema definition using the library's internal type inference system.
 
 ### Type inference
 
@@ -85,7 +85,7 @@ The `EnvSchemaItem<T>` interface defines the structure for schema items with adv
 
 ```typescript
 interface EnvSchemaItem<T> {
-  type: SchemaType;
+  type: typeof String | typeof Number | typeof Boolean;
   required?: boolean;
   default?: T;
 }
@@ -93,7 +93,7 @@ interface EnvSchemaItem<T> {
 
 ### Properties
 
-<ResponseField name="type" type="SchemaType" required>
+<ResponseField name="type" type="typeof String | typeof Number | typeof Boolean" required>
   The type constructor for the environment variable. Must be one of `String`, `Number`, or `Boolean`.
 </ResponseField>
 
