@@ -1,0 +1,373 @@
+---
+title: Custom env files
+description: Use different .env files for different environments and scenarios
+---
+
+# Custom env files
+
+Env Core supports loading environment variables from custom .env files. This is useful for managing different configurations for development, testing, staging, and production environments.
+
+## Basic custom file usage
+
+Pass the filename as the second argument to `validateEnv`:
+
+```javascript
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema.js';
+
+// Load from default .env file
+const env = validateEnv(envSchema);
+
+// Load from custom file
+const env = validateEnv(envSchema, 'test.env');
+```
+
+<Info>
+  The file path is relative to your project root (where you run `node`).
+</Info>
+
+## Environment-specific files
+
+Use different files for different environments:
+
+```javascript
+const envFile = process.env.NODE_ENV === 'test' ? 'test.env' : '.env';
+const env = validateEnv(envSchema, envFile);
+```
+
+Or use a more comprehensive approach:
+
+```javascript
+const getEnvFile = () => {
+  switch (process.env.NODE_ENV) {
+    case 'test':
+      return 'test.env';
+    case 'staging':
+      return 'staging.env';
+    case 'production':
+      return 'production.env';
+    default:
+      return '.env';
+  }
+};
+
+const env = validateEnv(envSchema, getEnvFile());
+```
+
+## Testing setup
+
+Create a dedicated test environment file:
+
+```bash test.env
+PORT=4000
+NODE_ENV=test
+DEBUG=false
+DATABASE_URL=postgresql://localhost/myapp_test
+REDIS_URL=redis://localhost:6379/1
+```
+
+```javascript test/setup.js
+import { validateEnv } from 'env-core';
+import { envSchema } from '../src/envSchema.js';
+
+// Use test environment for all tests
+export const testEnv = validateEnv(envSchema, 'test.env');
+```
+
+```javascript test/integration.test.js
+import { testEnv } from './setup.js';
+import { startServer } from '../src/server.js';
+
+describe('Integration tests', () => {
+  it('should start server with test config', async () => {
+    const server = await startServer(testEnv.PORT);
+    expect(server).toBeDefined();
+  });
+});
+```
+
+## Multiple environment files
+
+Maintain separate files for each environment:
+
+```plaintext
+project/
+├── .env              # Development (default)
+├── .env.example      # Template for developers
+├── test.env          # Testing
+├── staging.env       # Staging environment
+└── production.env    # Production (if needed locally)
+```
+
+<Warning>
+  Never commit production secrets to version control! Use `.gitignore` to exclude sensitive .env files.
+</Warning>
+
+## .env.example template
+
+Maintain a `.env.example` file (safe to commit) showing required variables:
+
+```bash .env.example
+# Server configuration
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=development
+
+# Database
+DATABASE_URL=postgresql://localhost/myapp
+DB_POOL_SIZE=10
+
+# Features
+DEBUG=true
+ENABLE_LOGGING=true
+
+# External services
+API_KEY=your_api_key_here
+API_URL=https://api.example.com
+```
+
+Developers can copy this to `.env` and fill in real values:
+
+```bash
+cp .env.example .env
+```
+
+## NestJS with custom files
+
+For NestJS, you need to load the file before passing to ConfigModule:
+
+```typescript src/app.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'test' ? 'test.env' : '.env',
+      validate: (config) => validateEnv(envSchema, config),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+## Express.js with custom files
+
+For Express.js, specify the file directly:
+
+```javascript src/index.js
+import express from 'express';
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema.js';
+
+// Determine which env file to use
+const envFile = process.env.NODE_ENV === 'test' ? 'test.env' : '.env';
+const env = validateEnv(envSchema, envFile);
+
+const app = express();
+
+app.listen(env.PORT, () => {
+  console.log(`Server running on port ${env.PORT}`);
+});
+```
+
+## File loading behavior
+
+Understand how Env Core loads environment files:
+
+### File exists
+
+If the specified file exists, Env Core loads it and merges with `process.env`:
+
+```javascript
+// test.env exists
+const env = validateEnv(envSchema, 'test.env');
+// Variables from test.env are loaded and merged with process.env
+```
+
+### File doesn't exist
+
+If the file doesn't exist, Env Core uses `process.env` only:
+
+```javascript
+// custom.env doesn't exist
+const env = validateEnv(envSchema, 'custom.env');
+// Falls back to process.env (no error)
+```
+
+<Info>
+  Missing .env files don't cause errors - Env Core silently falls back to `process.env`. Validation errors only occur if required variables are missing.
+</Info>
+
+## Practical examples
+
+### Development and production
+
+```bash .env.development
+PORT=3000
+NODE_ENV=development
+DEBUG=true
+DATABASE_URL=postgresql://localhost/myapp_dev
+LOG_LEVEL=debug
+```
+
+```bash .env.production
+PORT=8080
+NODE_ENV=production
+DEBUG=false
+DATABASE_URL=postgresql://prodhost/myapp
+LOG_LEVEL=info
+```
+
+```javascript
+const isProd = process.env.NODE_ENV === 'production';
+const envFile = isProd ? '.env.production' : '.env.development';
+const env = validateEnv(envSchema, envFile);
+```
+
+### Testing with different databases
+
+```bash test.env
+DATABASE_URL=postgresql://localhost/myapp_test
+REDIS_URL=redis://localhost:6379/1
+DEBUG=false
+NODE_ENV=test
+```
+
+```bash test.integration.env
+DATABASE_URL=postgresql://testhost/integration_db
+REDIS_URL=redis://testhost:6379/1
+DEBUG=true
+NODE_ENV=test
+```
+
+```javascript
+const testType = process.env.TEST_TYPE || 'unit';
+const envFile = testType === 'integration' ? 'test.integration.env' : 'test.env';
+const env = validateEnv(envSchema, envFile);
+```
+
+### Local overrides
+
+```plaintext
+project/
+├── .env              # Committed defaults
+├── .env.local        # Local overrides (gitignored)
+```
+
+```javascript
+import fs from 'fs';
+
+// Prefer local overrides if they exist
+const envFile = fs.existsSync('.env.local') ? '.env.local' : '.env';
+const env = validateEnv(envSchema, envFile);
+```
+
+## .gitignore configuration
+
+Protect sensitive files:
+
+```bash .gitignore
+# Environment files
+.env
+.env.local
+.env.*.local
+production.env
+staging.env
+
+# Keep these
+!.env.example
+!test.env
+```
+
+<Tip>
+  Test environment files can often be committed since they use local test databases and dummy credentials.
+</Tip>
+
+## CI/CD integration
+
+In CI/CD pipelines, set environment variables directly instead of using files:
+
+```yaml .github/workflows/test.yml
+name: Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PORT: 4000
+      NODE_ENV: test
+      DATABASE_URL: postgresql://localhost/test_db
+      DEBUG: false
+    steps:
+      - uses: actions/checkout@v2
+      - run: npm test
+```
+
+Env Core validates `process.env` if the file doesn't exist:
+
+```javascript
+// In CI, test.env might not exist
+// Env Core will validate process.env instead
+const env = validateEnv(envSchema, 'test.env');
+```
+
+## Best practices
+
+<Accordion title="Keep .env.example updated">
+  Maintain an example file showing all required variables:
+  
+  ```bash
+  # Always commit this
+  .env.example
+  
+  # Developers run:
+  cp .env.example .env
+  ```
+</Accordion>
+
+<Accordion title="Use test.env for consistent testing">
+  Commit test.env with safe test values so all developers and CI use the same test configuration:
+  
+  ```bash test.env
+  DATABASE_URL=postgresql://localhost/myapp_test
+  NODE_ENV=test
+  ```
+</Accordion>
+
+<Accordion title="Never commit production secrets">
+  Add production env files to .gitignore:
+  
+  ```bash .gitignore
+  .env
+  .env.production
+  .env.staging
+  *.env.local
+  ```
+</Accordion>
+
+<Accordion title="Document which files to create">
+  Add instructions in your README:
+  
+  ```markdown
+  ## Setup
+  
+  1. Copy .env.example to .env
+  2. Fill in your local values
+  3. For testing, test.env is already configured
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Simple validation" icon="check" href="/examples/simple-validation">
+    Learn basic validation patterns
+  </Card>
+  <Card title="Advanced configuration" icon="sliders" href="/examples/advanced-configuration">
+    Explore defaults and optional values
+  </Card>
+</CardGroup>

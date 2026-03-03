@@ -1,0 +1,81 @@
+---
+title: Introduction to Env Core
+description: Type-safe environment variable validation library for Node.js projects
+---
+
+# Welcome to Env Core
+
+Env Core is a lightweight, type-safe environment variable validation library for Node.js projects. It helps you catch configuration errors early by validating your environment variables at startup time.
+
+<CardGroup cols={2}>
+  <Card title="Type-safe validation" icon="shield-check">
+    Get full TypeScript type inference for your validated environment variables
+  </Card>
+  <Card title="Framework agnostic" icon="puzzle-piece">
+    Works seamlessly with Express.js, NestJS, and any Node.js framework
+  </Card>
+  <Card title="Detailed error messages" icon="triangle-exclamation">
+    Clear, actionable error messages when validation fails
+  </Card>
+  <Card title="Zero configuration" icon="bolt">
+    Simple API with sensible defaults - works with .env files out of the box
+  </Card>
+</CardGroup>
+
+## Key features
+
+- **Type-safe validation** - Supports `String`, `Number`, and `Boolean` types with full TypeScript inference
+- **Optional variables** - Define optional variables with default values
+- **Detailed errors** - Get comprehensive error messages for missing or invalid variables
+- **Framework compatible** - Compatible with Express.js, NestJS, and other Node.js frameworks
+- **Minimal dependencies** - Only depends on `dotenv` for .env file parsing
+- **ESM and CommonJS** - Works with both `import` and `require`
+
+## How it works
+
+Env Core validates your environment variables against a schema you define. If validation fails, your application won't start, preventing runtime errors caused by misconfiguration.
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false }
+});
+
+// TypeScript knows the exact types!
+console.log(env.PORT); // number
+console.log(env.NODE_ENV); // string
+console.log(env.DEBUG); // boolean
+```
+
+## Quick navigation
+
+<CardGroup cols={2}>
+  <Card title="Get started" icon="rocket" href="/installation">
+    Install Env Core and set up your first validation schema
+  </Card>
+  <Card title="Quick start" icon="play" href="/quickstart">
+    Follow a step-by-step guide to validate your first environment
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/schema-definition">
+    Learn about schema definition, validation, and type safety
+  </Card>
+  <Card title="Framework guides" icon="code" href="/guides/express">
+    Integration guides for Express.js, NestJS, and more
+  </Card>
+</CardGroup>
+
+## Why Env Core?
+
+Environment variables are a common source of runtime errors in Node.js applications. A missing or incorrectly typed variable can cause your application to crash in production. Env Core solves this by:
+
+- **Validating at startup** - Catch configuration errors before they cause problems
+- **Providing type safety** - TypeScript knows the exact types of your environment variables
+- **Clear error messages** - Quickly identify and fix configuration issues
+- **Simple API** - Define your schema and let Env Core handle the rest
+
+<Info>
+  Env Core is MIT licensed and open source. Contributions are welcome!
+</Info>

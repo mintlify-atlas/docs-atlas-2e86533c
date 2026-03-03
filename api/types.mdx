@@ -1,0 +1,239 @@
+---
+title: Core types
+description: Type definitions for validated environment objects and schema items
+---
+
+The core types provide the foundation for type-safe environment validation in env-core.
+
+## ValidatedEnv
+
+The `ValidatedEnv<T>` type represents the validated and type-safe environment object returned by `validateEnv`.
+
+### Type definition
+
+```typescript
+type ValidatedEnv<T extends EnvSchema> = {
+  [K in keyof T]: InferType<T[K]>
+};
+```
+
+### Description
+
+This mapped type transforms an `EnvSchema` into an object with properly typed values. For each key in the schema, it infers the correct TypeScript type based on the schema definition.
+
+### Type inference
+
+The type automatically infers the correct type for each property:
+
+- `String` constructor → `string`
+- `Number` constructor → `number`
+- `Boolean` constructor → `boolean`
+- Schema items with explicit types → inferred from the `type` property
+
+### Example
+
+```typescript
+import { validateEnv } from 'env-core';
+import type { ValidatedEnv } from 'env-core';
+
+const schema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+} as const;
+
+// Explicit type annotation (usually not needed)
+const env: ValidatedEnv<typeof schema> = validateEnv(schema);
+
+// TypeScript knows:
+// env.PORT is number
+// env.NODE_ENV is string
+// env.DEBUG is boolean
+```
+
+### Usage with custom types
+
+```typescript
+import type { ValidatedEnv, EnvSchema } from 'env-core';
+
+// Define a reusable schema type
+interface AppEnvSchema extends EnvSchema {
+  PORT: typeof Number;
+  NODE_ENV: typeof String;
+  DEBUG: {
+    type: typeof Boolean;
+    default: boolean;
+  };
+}
+
+// Type for the validated environment
+type AppEnv = ValidatedEnv<AppEnvSchema>;
+
+// AppEnv is equivalent to:
+// {
+//   PORT: number;
+//   NODE_ENV: string;
+//   DEBUG: boolean;
+// }
+```
+
+## EnvSchemaItem
+
+The `EnvSchemaItem<T>` interface defines the structure for schema items with advanced configuration options.
+
+### Type definition
+
+```typescript
+interface EnvSchemaItem<T> {
+  type: SchemaType;
+  required?: boolean;
+  default?: T;
+}
+```
+
+### Properties
+
+<ResponseField name="type" type="SchemaType" required>
+  The type constructor for the environment variable. Must be one of `String`, `Number`, or `Boolean`.
+</ResponseField>
+
+<ResponseField name="required" type="boolean" default="true">
+  Whether the environment variable is required. When set to `false`, the variable becomes optional. If omitted, defaults to `true`.
+</ResponseField>
+
+<ResponseField name="default" type="T">
+  The default value to use when the environment variable is not set. Providing a default value implicitly makes the variable optional.
+</ResponseField>
+
+### Examples
+
+#### Required variable with no default
+
+```typescript
+const schema = {
+  PORT: {
+    type: Number,
+    required: true, // explicit, but true by default
+  },
+};
+```
+
+#### Optional variable with default
+
+```typescript
+const schema = {
+  DEBUG: {
+    type: Boolean,
+    default: false, // implicitly optional
+  },
+};
+```
+
+#### Optional variable without default
+
+```typescript
+const schema = {
+  HOST: {
+    type: String,
+    required: false, // explicitly optional
+  },
+};
+
+// env.HOST will be undefined if not set
+```
+
+#### All properties specified
+
+```typescript
+const schema = {
+  MAX_CONNECTIONS: {
+    type: Number,
+    required: false,
+    default: 100,
+  },
+};
+```
+
+### Type parameter
+
+The generic type parameter `T` represents the TypeScript type of the environment variable value:
+
+```typescript
+// T is number
+const numberItem: EnvSchemaItem<number> = {
+  type: Number,
+  default: 3000,
+};
+
+// T is string
+const stringItem: EnvSchemaItem<string> = {
+  type: String,
+  default: 'production',
+};
+
+// T is boolean
+const booleanItem: EnvSchemaItem<boolean> = {
+  type: Boolean,
+  default: false,
+};
+```
+
+## Relationship between types
+
+These types work together to provide end-to-end type safety:
+
+```typescript
+import type { EnvSchema, EnvSchemaItem, ValidatedEnv } from 'env-core';
+
+// 1. Define schema using EnvSchemaItem
+const schema = {
+  PORT: Number,                                    // Shorthand
+  DEBUG: { type: Boolean, default: false },        // EnvSchemaItem<boolean>
+  HOST: { type: String, required: false },         // EnvSchemaItem<string>
+} satisfies EnvSchema;
+
+// 2. Validate and get typed result
+const env = validateEnv(schema);
+
+// 3. env is of type ValidatedEnv<typeof schema>
+// TypeScript infers:
+// {
+//   PORT: number;
+//   DEBUG: boolean;
+//   HOST: string | undefined;
+// }
+```
+
+## TypeScript tips
+
+### Use `as const` for better inference
+
+```typescript
+const schema = {
+  PORT: Number,
+  NODE_ENV: String,
+} as const;
+
+const env = validateEnv(schema);
+// Better type inference with literal types
+```
+
+### Export schema types for reuse
+
+```typescript
+// envSchema.ts
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+} as const;
+
+export type Env = ValidatedEnv<typeof envSchema>;
+
+// app.ts
+import type { Env } from './envSchema';
+
+function startServer(env: Env) {
+  // env is fully typed
+}
+```

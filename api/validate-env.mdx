@@ -1,0 +1,241 @@
+---
+title: validateEnv
+description: Type-safe environment variable validation function that loads and validates environment variables based on a schema
+---
+
+The `validateEnv` function is the core utility of env-core that validates and loads environment variables based on a provided schema. It ensures type safety and provides detailed error messages when validation fails.
+
+## Function signatures
+
+The function has two overloads to support different use cases:
+
+### Standard usage (Node.js/Express)
+
+```typescript
+function validateEnv<T extends EnvSchema>(
+  schema: T,
+  envFile?: string
+): ValidatedEnv<T>
+```
+
+### NestJS integration
+
+```typescript
+function validateEnv<T extends EnvSchema>(
+  schema: T,
+  config: Record<string, any>,
+  envFile?: string
+): ValidatedEnv<T>
+```
+
+## Parameters
+
+<ParamField path="schema" type="T extends EnvSchema" required>
+  An object describing the expected environment variables and their types. Each key in the schema represents an environment variable name, and the value can be:
+  - A constructor (`String`, `Number`, or `Boolean`) for required variables
+  - An object with `type`, `required`, and `default` properties for advanced configuration
+</ParamField>
+
+<ParamField path="config" type="Record<string, any>">
+  A configuration object containing environment variables. This parameter is used for NestJS integration with the `@nestjs/config` module. When provided, the function validates this object instead of loading from a file.
+</ParamField>
+
+<ParamField path="envFile" type="string" default=".env">
+  The name of the environment file to load. If not provided, defaults to `.env` in the current working directory. This parameter is ignored when `config` is provided.
+</ParamField>
+
+## Return value
+
+<ResponseField name="ValidatedEnv<T>" type="object">
+  Returns an object containing the validated environment variables with proper TypeScript types inferred from the schema. The return type is fully type-safe and provides autocomplete for all defined environment variables.
+  
+  <Expandable title="Type inference">
+    The return type automatically infers the correct TypeScript type for each variable:
+    - `String` → `string`
+    - `Number` → `number`
+    - `Boolean` → `boolean`
+    - Schema items with defaults → inferred from default value type
+  </Expandable>
+</ResponseField>
+
+## Usage examples
+
+### Basic usage with simple types
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+
+// env.PORT is typed as number
+// env.NODE_ENV is typed as string
+// env.DEBUG is typed as boolean
+console.log(`Server running on port ${env.PORT}`);
+```
+
+### With default values and optional fields
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: {
+    type: Boolean,
+    default: false,
+  },
+  HOST: {
+    type: String,
+    default: '0.0.0.0',
+    required: false,
+  },
+});
+
+// DEBUG defaults to false if not set
+// HOST is optional and defaults to '0.0.0.0'
+```
+
+### With custom env file
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+}, 'test.env');
+
+// Loads variables from test.env instead of .env
+```
+
+### Express.js integration
+
+```javascript
+import express from 'express';
+import { validateEnv } from 'env-core';
+
+const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+};
+
+const env = validateEnv(envSchema);
+
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('Hello World!');
+});
+
+app.listen(env.PORT, () => {
+  console.log(`Server is running on port ${env.PORT}`);
+});
+```
+
+### NestJS integration
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from 'env-core';
+
+const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DATABASE_URL: String,
+  DEBUG: { type: Boolean, default: false },
+};
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (config) => validateEnv(envSchema, config),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+## Error behavior
+
+### Standard usage (Node.js/Express)
+
+When validation fails in standard usage, the function:
+1. Logs detailed error messages to `console.error`
+2. Calls `process.exit(1)` to terminate the application
+
+This prevents the application from starting with invalid configuration.
+
+```bash
+Environment validation failed:
+- Missing required field: NODE_ENV
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+### NestJS usage
+
+When validation fails with NestJS integration (when `config` parameter is provided), the function:
+1. Throws an `Error` with formatted error messages
+2. Allows NestJS to handle the error and prevent initialization
+
+```typescript
+Error: Environment validation failed:
+- Missing required field: NODE_ENV
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+## Validation rules
+
+<Expandable title="Required fields">
+  Variables defined with a simple constructor (`String`, `Number`, `Boolean`) are required by default. Missing required fields will cause validation to fail.
+  
+  ```typescript
+  const env = validateEnv({
+    PORT: Number, // required
+  });
+  ```
+</Expandable>
+
+<Expandable title="Optional fields">
+  Variables can be made optional by setting `required: false` or by providing a `default` value.
+  
+  ```typescript
+  const env = validateEnv({
+    DEBUG: { type: Boolean, default: false }, // optional with default
+    HOST: { type: String, required: false },  // optional without default
+  });
+  ```
+</Expandable>
+
+<Expandable title="Type validation">
+  - **String**: Accepts any string value from the environment
+  - **Number**: Converts string to number, fails if result is `NaN`
+  - **Boolean**: Only accepts `'true'` or `'false'` (case-sensitive)
+  
+  ```typescript
+  // Valid .env values
+  PORT=3000        // ✓ Valid number
+  DEBUG=true       // ✓ Valid boolean
+  NODE_ENV=prod    // ✓ Valid string
+  
+  // Invalid .env values
+  PORT=abc         // ✗ Not a number
+  DEBUG=yes        // ✗ Must be 'true' or 'false'
+  ```
+</Expandable>
+
+## Notes
+
+- The function automatically loads the `.env` file using `dotenv` if it exists
+- Environment variables from `process.env` take precedence over `.env` file values
+- When using custom env files, the path is resolved relative to the current working directory
+- TypeScript provides full autocomplete and type checking for the returned object

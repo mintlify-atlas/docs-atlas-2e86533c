@@ -1,0 +1,359 @@
+---
+title: General Node.js usage
+description: Use Env Core in any Node.js application
+---
+
+# General Node.js usage
+
+Env Core works with any Node.js application, regardless of the framework you're using. This guide covers general usage patterns that apply to all Node.js projects.
+
+## Basic usage
+
+The simplest way to use Env Core is to call `validateEnv` at the start of your application:
+
+```javascript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+});
+
+console.log(`Starting application on port ${env.PORT}`);
+```
+
+## Organizing your configuration
+
+For larger projects, organize your environment configuration in a dedicated module:
+
+```javascript config/env.js
+import { validateEnv } from 'env-core';
+
+export const envSchema = {
+  // Server configuration
+  PORT: Number,
+  HOST: { type: String, default: '0.0.0.0' },
+  
+  // Environment
+  NODE_ENV: String,
+  
+  // Database
+  DATABASE_URL: String,
+  DB_POOL_SIZE: { type: Number, default: 10 },
+  
+  // Features
+  DEBUG: { type: Boolean, default: false },
+  ENABLE_LOGGING: { type: Boolean, default: true },
+};
+
+export const env = validateEnv(envSchema);
+```
+
+Then import it where needed:
+
+```javascript index.js
+import { env } from './config/env.js';
+import { startServer } from './server.js';
+import { connectDatabase } from './database.js';
+
+await connectDatabase(env.DATABASE_URL);
+await startServer(env.PORT, env.HOST);
+```
+
+## Using with different module systems
+
+Env Core supports both ESM and CommonJS:
+
+<Tabs>
+  <Tab title="ESM (import)">
+    ```javascript
+    import { validateEnv } from 'env-core';
+    
+    const env = validateEnv({
+      PORT: Number,
+      NODE_ENV: String,
+    });
+    ```
+  </Tab>
+  
+  <Tab title="CommonJS (require)">
+    ```javascript
+    const { validateEnv } = require('env-core');
+    
+    const env = validateEnv({
+      PORT: Number,
+      NODE_ENV: String,
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## TypeScript support
+
+For TypeScript projects, Env Core provides full type inference:
+
+```typescript config/env.ts
+import { validateEnv, type ValidatedEnv, type EnvSchema } from 'env-core';
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+} satisfies EnvSchema;
+
+export const env = validateEnv(envSchema);
+export type Env = ValidatedEnv<typeof envSchema>;
+```
+
+```typescript index.ts
+import { env } from './config/env';
+
+// TypeScript knows the exact types
+console.log(env.PORT);      // number
+console.log(env.NODE_ENV);  // string
+console.log(env.DEBUG);     // boolean
+```
+
+## Environment-specific configuration
+
+You can use different .env files for different environments:
+
+```javascript
+const envFile = process.env.NODE_ENV === 'test' ? 'test.env' : '.env';
+const env = validateEnv(envSchema, envFile);
+```
+
+Or create environment-specific configuration:
+
+```javascript config/env.js
+import { validateEnv } from 'env-core';
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isProduction = process.env.NODE_ENV === 'production';
+
+export const envSchema = {
+  PORT: { type: Number, default: isDevelopment ? 3000 : undefined },
+  DEBUG: { type: Boolean, default: isDevelopment },
+  LOG_LEVEL: { type: String, default: isDevelopment ? 'debug' : 'info' },
+};
+
+export const env = validateEnv(envSchema);
+```
+
+## Using with worker threads
+
+When using worker threads, validate the environment in the main thread and pass the validated config to workers:
+
+```javascript main.js
+import { Worker } from 'worker_threads';
+import { env } from './config/env.js';
+
+const worker = new Worker('./worker.js', {
+  workerData: {
+    port: env.PORT,
+    debug: env.DEBUG,
+  },
+});
+```
+
+```javascript worker.js
+import { workerData } from 'worker_threads';
+
+console.log(`Worker running with config:`, workerData);
+```
+
+## Using with child processes
+
+Child processes inherit environment variables from the parent:
+
+```javascript
+import { spawn } from 'child_process';
+import { env } from './config/env.js';
+
+// Validate in parent process
+const child = spawn('node', ['child.js'], {
+  env: {
+    ...process.env,
+    PORT: String(env.PORT),
+    DEBUG: String(env.DEBUG),
+  },
+});
+```
+
+## Testing patterns
+
+For testing, use a separate test environment file:
+
+```javascript test/setup.js
+import { validateEnv } from 'env-core';
+import { envSchema } from '../config/env.js';
+
+// Use test environment file
+export const testEnv = validateEnv(envSchema, 'test.env');
+```
+
+```bash test.env
+PORT=4000
+NODE_ENV=test
+DEBUG=false
+DATABASE_URL=postgresql://localhost/test_db
+```
+
+Or mock environment variables in tests:
+
+```javascript test/example.test.js
+import { beforeAll, afterAll } from '@jest/globals';
+
+let originalEnv;
+
+beforeAll(() => {
+  originalEnv = process.env;
+  process.env = {
+    ...originalEnv,
+    PORT: '4000',
+    NODE_ENV: 'test',
+    DEBUG: 'false',
+  };
+});
+
+afterAll(() => {
+  process.env = originalEnv;
+});
+```
+
+## CLI applications
+
+For CLI applications, validate environment before running commands:
+
+```javascript bin/cli.js
+#!/usr/bin/env node
+
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  API_KEY: String,
+  API_URL: String,
+  DEBUG: { type: Boolean, default: false },
+});
+
+if (env.DEBUG) {
+  console.log('Debug mode enabled');
+}
+
+// Run CLI commands with validated environment
+```
+
+## Serverless functions
+
+In serverless environments, validate once at cold start:
+
+```javascript functions/api.js
+import { validateEnv } from 'env-core';
+
+// Validate once at cold start
+const env = validateEnv({
+  DATABASE_URL: String,
+  API_KEY: String,
+  DEBUG: { type: Boolean, default: false },
+});
+
+// Handler uses validated environment
+export async function handler(event, context) {
+  if (env.DEBUG) {
+    console.log('Event:', event);
+  }
+  
+  // Use env.DATABASE_URL, env.API_KEY, etc.
+}
+```
+
+## Error handling patterns
+
+Env Core validates at startup, so no error handling is needed in your business logic:
+
+```javascript
+import { env } from './config/env.js';
+// If validation fails, process exits here
+
+// This code only runs if validation succeeds
+function startApplication() {
+  // No need to check if env.PORT exists or is a number
+  // Env Core guarantees it's valid
+  console.log(`Starting on port ${env.PORT}`);
+}
+```
+
+## Best practices
+
+<Accordion title="Validate once at startup">
+  Call `validateEnv` once at application startup, not in every module:
+  
+  ```javascript
+  // ✅ Good: Validate once
+  // config/env.js
+  export const env = validateEnv(envSchema);
+  
+  // ❌ Bad: Validate in multiple places
+  // server.js
+  const env = validateEnv(envSchema);
+  // database.js
+  const env = validateEnv(envSchema);
+  ```
+</Accordion>
+
+<Accordion title="Export the validated environment">
+  Export the validated `env` object from a central module:
+  
+  ```javascript
+  // config/env.js
+  export const env = validateEnv(envSchema);
+  
+  // Other files
+  import { env } from './config/env.js';
+  ```
+</Accordion>
+
+<Accordion title="Keep .env files out of version control">
+  Add `.env` to your `.gitignore` but maintain a `.env.example` file:
+  
+  ```bash .gitignore
+  .env
+  .env.local
+  ```
+  
+  ```bash .env.example
+  PORT=3000
+  NODE_ENV=development
+  DATABASE_URL=postgresql://localhost/myapp
+  DEBUG=false
+  ```
+</Accordion>
+
+<Accordion title="Document your environment variables">
+  Add comments to your schema explaining each variable:
+  
+  ```javascript
+  export const envSchema = {
+    // Server port (default: 3000 in dev)
+    PORT: Number,
+    
+    // Environment: development, production, test
+    NODE_ENV: String,
+    
+    // PostgreSQL connection string
+    DATABASE_URL: String,
+  };
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Express.js integration" icon="code" href="/guides/express">
+    See framework-specific integration with Express.js
+  </Card>
+  <Card title="Examples" icon="book" href="/examples/simple-validation">
+    Explore more usage examples
+  </Card>
+</CardGroup>

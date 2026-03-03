@@ -1,0 +1,357 @@
+---
+title: Advanced configuration
+description: Use default values, optional fields, and advanced schema patterns
+---
+
+# Advanced configuration
+
+This guide covers advanced configuration patterns including default values, optional fields, and mixed schema definitions.
+
+## Default values
+
+Provide default values for variables that aren't critical to set:
+
+```javascript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  DEBUG: { 
+    type: Boolean,
+    default: false,
+  },
+  HOST: {
+    type: String,
+    default: '0.0.0.0',
+  },
+  PORT: {
+    type: Number,
+    default: 3000,
+  },
+});
+```
+
+Now these variables are optional in your .env file:
+
+```bash .env
+# PORT not specified - will use default 3000
+# DEBUG not specified - will use default false
+HOST=localhost
+```
+
+<Info>
+  When a variable has a `default` value, it automatically becomes optional. You don't need to set `required: false`.
+</Info>
+
+## Optional fields
+
+Make fields optional without providing a default value:
+
+```javascript
+const env = validateEnv({
+  OPTIONAL_VAR: {
+    type: String,
+    required: false,
+  },
+  ANOTHER_OPTIONAL: {
+    type: Number,
+    required: false,
+  },
+});
+```
+
+If these variables aren't set, they'll be `undefined`:
+
+```javascript
+if (env.OPTIONAL_VAR !== undefined) {
+  console.log(`Optional var: ${env.OPTIONAL_VAR}`);
+} else {
+  console.log('Optional var not set');
+}
+```
+
+<Warning>
+  Optional fields without defaults will be `undefined` if not set. Make sure to handle this in your code.
+</Warning>
+
+## Mixed schema approach
+
+Combine simple types (required) with configuration objects (optional with defaults) for maximum clarity:
+
+```javascript
+const env = validateEnv({
+  // Required variables - simple syntax
+  PORT: Number,
+  NODE_ENV: String,
+  DATABASE_URL: String,
+  
+  // Optional with defaults - configuration syntax
+  DEBUG: {
+    type: Boolean,
+    default: false,
+  },
+  HOST: {
+    type: String,
+    default: '0.0.0.0',
+  },
+  LOG_LEVEL: {
+    type: String,
+    default: 'info',
+  },
+});
+```
+
+```bash .env
+# Required - must be set
+PORT=3000
+NODE_ENV=development
+DATABASE_URL=postgresql://localhost/myapp
+
+# Optional - can be omitted
+# DEBUG defaults to false
+# HOST defaults to 0.0.0.0
+LOG_LEVEL=debug
+```
+
+<Tip>
+  This is the recommended approach - it's immediately clear which variables are required and which have sensible defaults.
+</Tip>
+
+## Environment-specific defaults
+
+Use different defaults based on the current environment:
+
+```javascript
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isProduction = process.env.NODE_ENV === 'production';
+
+const env = validateEnv({
+  NODE_ENV: String,
+  
+  // Development-friendly defaults
+  DEBUG: {
+    type: Boolean,
+    default: isDevelopment,  // true in dev, false otherwise
+  },
+  LOG_LEVEL: {
+    type: String,
+    default: isDevelopment ? 'debug' : 'info',
+  },
+  
+  // Different port defaults
+  PORT: {
+    type: Number,
+    default: isDevelopment ? 3000 : 8080,
+  },
+});
+```
+
+## Configuration with all options
+
+Here's an example using all configuration options:
+
+```javascript
+const env = validateEnv({
+  // Simple required
+  API_KEY: String,
+  
+  // Required with explicit flag
+  DATABASE_URL: {
+    type: String,
+    required: true,
+  },
+  
+  // Optional with default
+  PORT: {
+    type: Number,
+    default: 3000,
+  },
+  
+  // Optional without default
+  OPTIONAL_FEATURE: {
+    type: Boolean,
+    required: false,
+  },
+  
+  // Required with default (unusual but valid)
+  // Will use default only if not set, but won't fail if missing
+  CACHE_TTL: {
+    type: Number,
+    default: 3600,
+    required: false,
+  },
+});
+```
+
+## Practical examples
+
+### Web server configuration
+
+```javascript
+const env = validateEnv({
+  // Critical settings - required
+  PORT: Number,
+  NODE_ENV: String,
+  
+  // Server settings - sensible defaults
+  HOST: { type: String, default: '0.0.0.0' },
+  TIMEOUT_MS: { type: Number, default: 30000 },
+  MAX_CONNECTIONS: { type: Number, default: 100 },
+  
+  // Feature flags - default to false
+  ENABLE_COMPRESSION: { type: Boolean, default: false },
+  ENABLE_RATE_LIMITING: { type: Boolean, default: false },
+  
+  // Optional features
+  REDIS_URL: { type: String, required: false },
+  SENTRY_DSN: { type: String, required: false },
+});
+```
+
+### Database configuration
+
+```javascript
+const env = validateEnv({
+  // Required - cannot run without database
+  DATABASE_URL: String,
+  
+  // Connection pool - reasonable defaults
+  DB_POOL_MIN: { type: Number, default: 2 },
+  DB_POOL_MAX: { type: Number, default: 10 },
+  DB_TIMEOUT_MS: { type: Number, default: 5000 },
+  
+  // SSL - optional, often needed in production
+  DB_SSL: { type: Boolean, default: false },
+  DB_SSL_REJECT_UNAUTHORIZED: { type: Boolean, default: true },
+  
+  // Optional read replica
+  DATABASE_READ_REPLICA_URL: { type: String, required: false },
+});
+```
+
+### API client configuration
+
+```javascript
+const env = validateEnv({
+  // Required credentials
+  API_KEY: String,
+  API_URL: String,
+  
+  // Request settings
+  API_TIMEOUT_MS: { type: Number, default: 5000 },
+  API_RETRY_ATTEMPTS: { type: Number, default: 3 },
+  API_RETRY_DELAY_MS: { type: Number, default: 1000 },
+  
+  // Optional settings
+  API_DEBUG: { type: Boolean, default: false },
+  API_CUSTOM_HEADER: { type: String, required: false },
+});
+```
+
+## Handling undefined optional values
+
+When using optional fields without defaults, handle undefined values:
+
+```javascript
+const env = validateEnv({
+  REDIS_URL: { type: String, required: false },
+  CACHE_ENABLED: { type: Boolean, required: false },
+});
+
+// Option 1: Check before using
+if (env.REDIS_URL !== undefined) {
+  connectToRedis(env.REDIS_URL);
+}
+
+// Option 2: Provide fallback with ??
+const redisUrl = env.REDIS_URL ?? 'redis://localhost:6379';
+
+// Option 3: Conditional logic
+const cacheEnabled = env.CACHE_ENABLED ?? false;
+if (cacheEnabled) {
+  enableCaching();
+}
+```
+
+## TypeScript with optional values
+
+TypeScript correctly infers optional types:
+
+```typescript
+const env = validateEnv({
+  REQUIRED: String,
+  WITH_DEFAULT: { type: Number, default: 42 },
+  OPTIONAL: { type: Boolean, required: false },
+});
+
+// Types:
+env.REQUIRED     // string
+env.WITH_DEFAULT // number
+env.OPTIONAL     // boolean | undefined
+
+// Handle optional values
+if (env.OPTIONAL !== undefined) {
+  const value: boolean = env.OPTIONAL;  // ✅ TypeScript knows it's defined here
+}
+```
+
+## Best practices
+
+<Accordion title="Use defaults for development convenience">
+  Provide sensible defaults for non-critical configuration to make local development easier:
+  
+  ```javascript
+  {
+    PORT: { type: Number, default: 3000 },
+    DEBUG: { type: Boolean, default: true },
+  }
+  ```
+</Accordion>
+
+<Accordion title="Require critical configuration">
+  Don't provide defaults for critical settings like database URLs or API keys:
+  
+  ```javascript
+  {
+    DATABASE_URL: String,  // Required - no default
+    API_KEY: String,       // Required - no default
+  }
+  ```
+</Accordion>
+
+<Accordion title="Document your defaults">
+  Add comments explaining default values:
+  
+  ```javascript
+  {
+    // Default: 10 connections (sufficient for most apps)
+    DB_POOL_SIZE: { type: Number, default: 10 },
+    
+    // Default: false (enable in production for performance)
+    ENABLE_CACHING: { type: Boolean, default: false },
+  }
+  ```
+</Accordion>
+
+<Accordion title="Use environment-aware defaults">
+  Different defaults for development vs production:
+  
+  ```javascript
+  const isDev = process.env.NODE_ENV === 'development';
+  
+  {
+    DEBUG: { type: Boolean, default: isDev },
+    LOG_LEVEL: { type: String, default: isDev ? 'debug' : 'info' },
+  }
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Custom env files" icon="file" href="/examples/custom-env-files">
+    Learn about using custom .env files
+  </Card>
+  <Card title="Schema definition" icon="file-code" href="/concepts/schema-definition">
+    Deep dive into schema definition patterns
+  </Card>
+</CardGroup>

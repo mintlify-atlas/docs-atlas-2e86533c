@@ -1,0 +1,199 @@
+---
+title: Schema definition
+description: Learn how to define environment variable schemas in Env Core
+---
+
+# Schema definition
+
+The environment schema is the core of Env Core. It defines which environment variables your application needs, their types, and whether they're required or optional.
+
+## Schema basics
+
+An environment schema is a plain JavaScript object where:
+- **Keys** represent environment variable names
+- **Values** define the type and validation rules
+
+```typescript
+const envSchema = {
+  PORT: Number,           // Required number
+  NODE_ENV: String,       // Required string
+  DEBUG: Boolean,         // Required boolean
+};
+```
+
+## Three ways to define schemas
+
+Env Core supports three different approaches to defining your schema, giving you flexibility based on your needs.
+
+### Use case 1: Simple types
+
+The simplest approach uses constructor functions directly. All variables defined this way are **required**.
+
+```javascript
+// src/envSchema.js
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+  HOST: String,
+};
+```
+
+<Info>
+  Use simple types when all your environment variables are required and have no default values.
+</Info>
+
+### Use case 2: Configuration options
+
+For more control, use configuration objects with `type`, `default`, and `required` properties.
+
+```javascript
+// src/envSchema.js
+
+export const envSchema = {
+  DEBUG: { 
+    type: Boolean,
+    default: false,
+  },
+  HOST: {
+    type: String,
+    default: '0.0.0.0',
+    required: false,
+  },
+};
+```
+
+<Tip>
+  Configuration objects are ideal when you want to provide default values or make variables optional.
+</Tip>
+
+### Use case 3: Mixed configuration
+
+Combine both approaches for maximum flexibility - use simple types for required variables and configuration objects for optional ones.
+
+```javascript
+// src/envSchema.js
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: {
+    type: Boolean,
+    default: false,
+  },
+  HOST: {
+    type: String,
+    default: '0.0.0.0',
+    required: false,
+  },
+};
+```
+
+<Info>
+  This is the recommended approach for most applications - it's clear which variables are required and which have sensible defaults.
+</Info>
+
+## Schema format reference
+
+Here's a complete reference of how to define environment variables in your schema:
+
+| Format | Description | Example |
+|--------|-------------|---------||
+| `KEY: Type` | Simple type definition (required by default) | `PORT: Number` |
+| `KEY: { type: Type, default: value }` | Type with default value (optional) | `DEBUG: { type: Boolean, default: false }` |
+| `KEY: { type: Type, required: boolean }` | Explicitly set if required | `NODE_ENV: { type: String, required: false }` |
+
+## Supported types
+
+Env Core supports three primitive types:
+
+- **`String`** - For text values (e.g., `NODE_ENV`, `DATABASE_URL`)
+- **`Number`** - For numeric values (e.g., `PORT`, `MAX_CONNECTIONS`)
+- **`Boolean`** - For true/false values (e.g., `DEBUG`, `ENABLE_LOGGING`)
+
+<Warning>
+  Boolean values in .env files must be the strings `"true"` or `"false"` (case-sensitive). Other values like `"yes"`, `"1"`, or `"on"` will cause validation errors.
+</Warning>
+
+## Configuration object properties
+
+When using the configuration object format, you can specify:
+
+### `type` (required)
+
+The expected type of the environment variable. Must be `String`, `Number`, or `Boolean`.
+
+```javascript
+{
+  PORT: { type: Number }
+}
+```
+
+### `default` (optional)
+
+A default value to use if the environment variable is not set. When a default is provided, the variable becomes optional automatically.
+
+```javascript
+{
+  DEBUG: { type: Boolean, default: false },
+  PORT: { type: Number, default: 3000 }
+}
+```
+
+### `required` (optional)
+
+Explicitly control whether a variable is required. Defaults to `true` for simple types, but defaults to `false` when a `default` value is provided.
+
+```javascript
+{
+  // Optional even without a default
+  OPTIONAL_VAR: { type: String, required: false },
+  
+  // Required even with a default (will use default only if not set)
+  IMPORTANT_VAR: { type: Number, default: 0, required: true }
+}
+```
+
+## Best practices
+
+<Accordion title="Organize schemas in a separate file">
+  Keep your environment schema in a dedicated file (e.g., `envSchema.js` or `env.config.js`) to make it easy to maintain and reuse across your application.
+</Accordion>
+
+<Accordion title="Use descriptive variable names">
+  Choose clear, uppercase names for environment variables following the CONSTANT_CASE convention (e.g., `DATABASE_URL`, `MAX_RETRY_ATTEMPTS`).
+</Accordion>
+
+<Accordion title="Provide sensible defaults">
+  For non-critical configuration, provide sensible defaults to make local development easier. Reserve required variables for critical configuration like database URLs or API keys.
+</Accordion>
+
+<Accordion title="Document your schema">
+  Add comments to your schema file explaining what each variable is used for and what values are acceptable.
+  
+  ```javascript
+  export const envSchema = {
+    // Server configuration
+    PORT: Number,  // Port to listen on (e.g., 3000)
+    HOST: { type: String, default: '0.0.0.0' },  // Host to bind to
+    
+    // Environment
+    NODE_ENV: String,  // Environment: development, production, test
+    
+    // Feature flags
+    DEBUG: { type: Boolean, default: false },  // Enable debug logging
+  };
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Validation" icon="shield-check" href="/concepts/validation">
+    Learn how Env Core validates your environment variables
+  </Card>
+  <Card title="Type safety" icon="lock" href="/concepts/type-safety">
+    Understand TypeScript type inference
+  </Card>
+</CardGroup>

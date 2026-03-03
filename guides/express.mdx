@@ -1,0 +1,315 @@
+---
+title: Express.js integration
+description: Use Env Core with Express.js applications
+---
+
+# Express.js integration
+
+Env Core integrates seamlessly with Express.js applications. This guide shows you how to validate your environment variables before starting your Express server.
+
+## Basic setup
+
+Here's a complete example of using Env Core with Express.js:
+
+<Steps>
+  <Step title="Define your environment schema">
+    Create a schema file for your environment variables:
+
+    ```javascript src/envSchema.js
+    export const envSchema = {
+      PORT: Number,
+      NODE_ENV: String,
+      DEBUG: {
+        type: Boolean,
+        default: false,
+      },
+      HOST: {
+        type: String,
+        default: '0.0.0.0',
+        required: false,
+      },
+    };
+    ```
+  </Step>
+
+  <Step title="Validate before starting the server">
+    Call `validateEnv` with your schema before creating your Express app:
+
+    ```javascript src/index.js
+    import express from 'express';
+    import { validateEnv } from 'env-core';
+    import { envSchema } from './envSchema.js';
+
+    // Validate the environment variables using the schema
+    const env = validateEnv(envSchema);
+
+    const app = express();
+
+    app.get('/', (req, res) => {
+        res.send('Hello World!');
+    });
+
+    app.listen(env.PORT, () => {
+        console.log(`Server is running on port ${env.PORT}`);
+    });
+    ```
+
+    <Info>
+      By default, `validateEnv()` loads variables from your `.env` file or `process.env`.
+    </Info>
+  </Step>
+
+  <Step title="Create your .env file">
+    Add your environment variables to a `.env` file:
+
+    ```bash .env
+    PORT=3000
+    NODE_ENV=development
+    DEBUG=true
+    ```
+  </Step>
+</Steps>
+
+## Using custom env files
+
+You can specify a custom environment file for different scenarios:
+
+```javascript
+// Use the default .env file
+const env = validateEnv(envSchema);
+
+// Use a custom env file
+const env = validateEnv(envSchema, 'test.env');
+```
+
+This is useful for:
+- **Testing** - Use `test.env` for test configurations
+- **Multiple environments** - Use `production.env`, `staging.env`, etc.
+- **Local overrides** - Use `local.env` for developer-specific settings
+
+## Validation behavior
+
+If any environment variable is missing or has the wrong type, the app will not start, and a detailed error message will be displayed:
+
+```yml
+Environment validation failed:
+- Missing required field: PORT
+- DEBUG should be a boolean
+```
+
+<Warning>
+  When validation fails, Env Core calls `process.exit(1)` to prevent your application from running with invalid configuration.
+</Warning>
+
+## Complete example
+
+Here's a more complete Express.js application with middleware and multiple routes:
+
+```javascript src/index.js
+import express from 'express';
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema.js';
+
+// Validate environment first
+const env = validateEnv(envSchema);
+
+const app = express();
+
+// Middleware
+app.use(express.json());
+
+if (env.DEBUG) {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
+
+// Routes
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Hello World!',
+    environment: env.NODE_ENV,
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Start server
+app.listen(env.PORT, env.HOST, () => {
+  console.log(`Server is running on http://${env.HOST}:${env.PORT}`);
+  console.log(`Environment: ${env.NODE_ENV}`);
+  console.log(`Debug mode: ${env.DEBUG}`);
+});
+```
+
+## TypeScript example
+
+For TypeScript projects, you get full type safety:
+
+```typescript src/envSchema.ts
+import type { EnvSchema } from 'env-core';
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+  HOST: { type: String, default: '0.0.0.0' },
+} satisfies EnvSchema;
+```
+
+```typescript src/index.ts
+import express from 'express';
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema';
+
+const env = validateEnv(envSchema);
+
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('Hello World!');
+});
+
+app.listen(env.PORT, () => {
+  console.log(`Server is running on port ${env.PORT}`);
+});
+```
+
+<Tip>
+  TypeScript automatically infers the types of `env.PORT` (number), `env.NODE_ENV` (string), etc.
+</Tip>
+
+## Common Express.js environment variables
+
+Here are some common environment variables for Express.js applications:
+
+```javascript
+export const envSchema = {
+  // Server
+  PORT: Number,
+  HOST: { type: String, default: '0.0.0.0' },
+  
+  // Environment
+  NODE_ENV: String,  // development, production, test
+  
+  // Database
+  DATABASE_URL: String,
+  DB_POOL_SIZE: { type: Number, default: 10 },
+  
+  // Security
+  SESSION_SECRET: String,
+  CORS_ORIGIN: String,
+  
+  // Features
+  DEBUG: { type: Boolean, default: false },
+  ENABLE_LOGGING: { type: Boolean, default: true },
+  
+  // External services
+  API_KEY: String,
+  API_URL: String,
+};
+```
+
+## Using environment in middleware
+
+You can use your validated environment in Express middleware:
+
+```javascript
+import { validateEnv } from 'env-core';
+import cors from 'cors';
+
+const env = validateEnv(envSchema);
+
+const app = express();
+
+// Configure CORS using environment variables
+app.use(cors({
+  origin: env.CORS_ORIGIN,
+  credentials: true,
+}));
+
+// Conditional middleware based on environment
+if (env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+```
+
+## Error handling
+
+Since validation happens at startup, you don't need to handle validation errors in your routes:
+
+```javascript
+const env = validateEnv(envSchema);
+// If validation fails, the process exits here
+
+// This code only runs if validation succeeds
+app.listen(env.PORT, () => {
+  console.log('Server started successfully');
+});
+```
+
+## Best practices
+
+<Accordion title="Validate before any initialization">
+  Call `validateEnv` at the very top of your entry file, before creating the Express app or connecting to databases:
+  
+  ```javascript
+  import { validateEnv } from 'env-core';
+  import { envSchema } from './envSchema.js';
+  
+  // Validate first
+  const env = validateEnv(envSchema);
+  
+  // Then initialize everything else
+  import express from 'express';
+  import { connectDatabase } from './database.js';
+  ```
+</Accordion>
+
+<Accordion title="Export the validated environment">
+  Export the validated `env` object so other modules can import it:
+  
+  ```javascript env.js
+  import { validateEnv } from 'env-core';
+  import { envSchema } from './envSchema.js';
+  
+  export const env = validateEnv(envSchema);
+  ```
+  
+  ```javascript database.js
+  import { env } from './env.js';
+  import mongoose from 'mongoose';
+  
+  export const connectDatabase = () => {
+    return mongoose.connect(env.DATABASE_URL);
+  };
+  ```
+</Accordion>
+
+<Accordion title="Use environment-specific defaults">
+  Provide sensible defaults for development while requiring explicit values in production:
+  
+  ```javascript
+  export const envSchema = {
+    PORT: { type: Number, default: 3000 },
+    DEBUG: {
+      type: Boolean,
+      default: process.env.NODE_ENV === 'development',
+    },
+  };
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="NestJS integration" icon="code" href="/guides/nestjs">
+    Learn how to use Env Core with NestJS
+  </Card>
+  <Card title="Custom env files" icon="file" href="/examples/custom-env-files">
+    See more examples of using custom .env files
+  </Card>
+</CardGroup>

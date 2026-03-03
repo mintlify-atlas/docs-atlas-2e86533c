@@ -1,0 +1,374 @@
+---
+title: NestJS integration
+description: Use Env Core with NestJS applications
+---
+
+# NestJS integration
+
+Env Core integrates seamlessly with NestJS's `ConfigModule`. This guide shows you how to validate environment variables during your NestJS application's initialization.
+
+## Basic setup
+
+Here's how to integrate Env Core with NestJS:
+
+<Steps>
+  <Step title="Define your environment schema">
+    Create a schema file for your environment variables:
+
+    ```typescript src/envSchema.ts
+    import type { EnvSchema } from 'env-core';
+
+    export const envSchema = {
+      PORT: Number,
+      NODE_ENV: String,
+      DEBUG: {
+        type: Boolean,
+        default: false,
+      },
+      HOST: {
+        type: String,
+        default: '0.0.0.0',
+        required: false,
+      },
+    } satisfies EnvSchema;
+    ```
+  </Step>
+
+  <Step title="Configure ConfigModule with validation">
+    Use Env Core's `validateEnv` function as the validation function in `ConfigModule`:
+
+    ```typescript src/app.module.ts
+    import { Module } from '@nestjs/common';
+    import { ConfigModule } from '@nestjs/config';
+    import { validateEnv } from 'env-core';
+    import { envSchema } from './envSchema';
+
+    @Module({
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          validate: (config) => validateEnv(envSchema, config),
+        }),
+      ],
+      controllers: [],
+      providers: [],
+    })
+    export class AppModule {}
+    ```
+
+    <Info>
+      NestJS passes the configuration object to the `validate` function. Env Core validates it and returns the typed environment object.
+    </Info>
+  </Step>
+
+  <Step title="Create your .env file">
+    Add your environment variables to a `.env` file in your project root:
+
+    ```bash .env
+    PORT=3000
+    NODE_ENV=development
+    DEBUG=true
+    ```
+  </Step>
+</Steps>
+
+## Validation behavior
+
+If the validation fails, NestJS will not initialize, and a descriptive error message will be thrown:
+
+```yml
+Error: Environment validation failed:
+- Missing required field: NODE_ENV
+- Missing required field: DEBUG
+- PORT should be a number
+```
+
+<Warning>
+  When using Env Core with NestJS, validation errors are thrown as exceptions rather than calling `process.exit()`. This allows NestJS's error handling to work properly.
+</Warning>
+
+## Using validated environment in services
+
+Once configured, you can inject the `ConfigService` to access your validated environment variables:
+
+```typescript src/app.service.ts
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { ValidatedEnv } from 'env-core';
+import type { envSchema } from './envSchema';
+
+type Env = ValidatedEnv<typeof envSchema>;
+
+@Injectable()
+export class AppService {
+  constructor(private configService: ConfigService<Env>) {}
+
+  getServerInfo() {
+    const port = this.configService.get('PORT', { infer: true });
+    const env = this.configService.get('NODE_ENV', { infer: true });
+    const debug = this.configService.get('DEBUG', { infer: true });
+
+    return {
+      port,
+      environment: env,
+      debug,
+    };
+  }
+}
+```
+
+<Tip>
+  Use the `ValidatedEnv` type with your schema to get full type safety when using `ConfigService`.
+</Tip>
+
+## Complete example
+
+Here's a complete NestJS application with Env Core:
+
+```typescript src/envSchema.ts
+import type { EnvSchema } from 'env-core';
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DATABASE_URL: String,
+  DEBUG: { type: Boolean, default: false },
+  REDIS_HOST: { type: String, default: 'localhost' },
+  REDIS_PORT: { type: Number, default: 6379 },
+} satisfies EnvSchema;
+```
+
+```typescript src/app.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from 'env-core';
+import { envSchema } from './envSchema';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (config) => validateEnv(envSchema, config),
+    }),
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+```
+
+```typescript src/app.controller.ts
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get()
+  getHello(): string {
+    return 'Hello World!';
+  }
+
+  @Get('info')
+  getInfo() {
+    return this.appService.getServerInfo();
+  }
+}
+```
+
+```typescript src/main.ts
+import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import { AppModule } from './app.module';
+import type { ValidatedEnv } from 'env-core';
+import type { envSchema } from './envSchema';
+
+type Env = ValidatedEnv<typeof envSchema>;
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  const configService = app.get(ConfigService<Env>);
+  const port = configService.get('PORT', { infer: true });
+  
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}`);
+}
+
+bootstrap();
+```
+
+## Common NestJS environment variables
+
+Here are typical environment variables for a NestJS application:
+
+```typescript
+export const envSchema = {
+  // Server
+  PORT: Number,
+  NODE_ENV: String,
+  
+  // Database
+  DATABASE_URL: String,
+  DATABASE_NAME: String,
+  DB_POOL_SIZE: { type: Number, default: 10 },
+  
+  // Redis
+  REDIS_HOST: { type: String, default: 'localhost' },
+  REDIS_PORT: { type: Number, default: 6379 },
+  REDIS_PASSWORD: { type: String, required: false },
+  
+  // JWT
+  JWT_SECRET: String,
+  JWT_EXPIRATION: { type: String, default: '1h' },
+  
+  // Features
+  DEBUG: { type: Boolean, default: false },
+  ENABLE_SWAGGER: { type: Boolean, default: true },
+  
+  // External APIs
+  API_KEY: String,
+  API_URL: String,
+} satisfies EnvSchema;
+```
+
+## Using environment in modules
+
+You can use the validated environment when configuring other modules:
+
+```typescript src/database.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import type { ValidatedEnv } from 'env-core';
+import type { envSchema } from './envSchema';
+
+type Env = ValidatedEnv<typeof envSchema>;
+
+@Module({
+  imports: [
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService<Env>) => ({
+        type: 'postgres',
+        url: configService.get('DATABASE_URL', { infer: true }),
+        autoLoadEntities: true,
+        synchronize: configService.get('NODE_ENV', { infer: true }) === 'development',
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class DatabaseModule {}
+```
+
+## Type-safe configuration service
+
+Create a wrapper around `ConfigService` for better type safety:
+
+```typescript src/config/env.service.ts
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { ValidatedEnv } from 'env-core';
+import type { envSchema } from '../envSchema';
+
+type Env = ValidatedEnv<typeof envSchema>;
+
+@Injectable()
+export class EnvService {
+  constructor(private configService: ConfigService<Env>) {}
+
+  get<K extends keyof Env>(key: K): Env[K] {
+    return this.configService.get(key, { infer: true })!;
+  }
+
+  isDevelopment(): boolean {
+    return this.get('NODE_ENV') === 'development';
+  }
+
+  isProduction(): boolean {
+    return this.get('NODE_ENV') === 'production';
+  }
+}
+```
+
+Register it as a provider:
+
+```typescript
+@Module({
+  providers: [EnvService],
+  exports: [EnvService],
+})
+export class ConfigModule {}
+```
+
+Use it in your services:
+
+```typescript
+@Injectable()
+export class AppService {
+  constructor(private env: EnvService) {}
+
+  getInfo() {
+    return {
+      port: this.env.get('PORT'),
+      debug: this.env.get('DEBUG'),
+      isDev: this.env.isDevelopment(),
+    };
+  }
+}
+```
+
+## Best practices
+
+<Accordion title="Make ConfigModule global">
+  Set `isGlobal: true` so you don't need to import `ConfigModule` in every module:
+  
+  ```typescript
+  ConfigModule.forRoot({
+    isGlobal: true,
+    validate: (config) => validateEnv(envSchema, config),
+  })
+  ```
+</Accordion>
+
+<Accordion title="Create a type alias for your environment">
+  Export a type alias for your validated environment to use throughout your app:
+  
+  ```typescript
+  export type Env = ValidatedEnv<typeof envSchema>;
+  ```
+</Accordion>
+
+<Accordion title="Use a custom configuration service">
+  Wrap `ConfigService` in a custom service for better type safety and utility methods:
+  
+  ```typescript
+  @Injectable()
+  export class EnvService {
+    constructor(private config: ConfigService<Env>) {}
+    
+    get<K extends keyof Env>(key: K): Env[K] {
+      return this.config.get(key, { infer: true })!;
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Validate early in the bootstrap process">
+  ConfigModule validates environment variables during module initialization, ensuring configuration is correct before any services start.
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Express.js integration" icon="code" href="/guides/express">
+    See how to use Env Core with Express.js
+  </Card>
+  <Card title="Type safety" icon="lock" href="/concepts/type-safety">
+    Learn more about TypeScript type inference
+  </Card>
+</CardGroup>

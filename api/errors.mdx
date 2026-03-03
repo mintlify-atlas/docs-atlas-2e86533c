@@ -1,0 +1,443 @@
+---
+title: Error handling
+description: Understanding validation errors and error handling patterns in env-core
+---
+
+env-core provides detailed error messages to help you quickly identify and fix environment configuration issues. The error handling behavior differs based on the execution context.
+
+## Error types
+
+The library can produce three types of validation errors:
+
+### Missing required field
+
+Occurs when a required environment variable is not set and has no default value.
+
+```bash
+- Missing required field: NODE_ENV
+```
+
+**Causes:**
+- Variable not defined in `.env` file or environment
+- Variable defined with simple constructor (`String`, `Number`, `Boolean`)
+- Variable defined with `required: true` (or `required` not specified)
+
+**Resolution:**
+```bash
+# Add to .env file
+NODE_ENV=production
+```
+
+### Type validation error
+
+Occurs when an environment variable value cannot be converted to the expected type.
+
+```bash
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+**Causes:**
+
+<Expandable title="Number validation">
+  **Error:** `{KEY} should be a number`
+  
+  Occurs when the value cannot be parsed as a valid number (results in `NaN`).
+  
+  ```bash
+  # Invalid
+  PORT=abc
+  PORT=3000px
+  PORT=
+  
+  # Valid
+  PORT=3000
+  PORT=8080
+  PORT=0
+  ```
+</Expandable>
+
+<Expandable title="Boolean validation">
+  **Error:** `{KEY} should be a boolean`
+  
+  Occurs when the value is not exactly `'true'` or `'false'` (case-sensitive).
+  
+  ```bash
+  # Invalid
+  DEBUG=yes
+  DEBUG=1
+  DEBUG=True
+  DEBUG=FALSE
+  
+  # Valid
+  DEBUG=true
+  DEBUG=false
+  ```
+</Expandable>
+
+### Unsupported type error
+
+Occurs when a schema defines a type that is not supported by env-core.
+
+```bash
+- API_TIMEOUT has an unsupported type
+```
+
+**Causes:**
+- Using a type other than `String`, `Number`, or `Boolean`
+- Passing an invalid constructor or value
+
+**Resolution:**
+```typescript
+// Invalid
+const schema = {
+  API_TIMEOUT: Date,        // ✗ Not supported
+  MAX_SIZE: BigInt,         // ✗ Not supported
+};
+
+// Valid
+const schema = {
+  API_TIMEOUT: Number,      // ✓ Use number for timestamps
+  MAX_SIZE: String,         // ✓ Parse manually if needed
+};
+```
+
+## Error handling modes
+
+env-core has two different error handling modes depending on the execution context:
+
+### Standard mode (Node.js/Express)
+
+Used when calling `validateEnv(schema)` or `validateEnv(schema, envFile)` without a config object.
+
+#### Behavior
+
+1. Validation errors are logged to `console.error`
+2. Process exits with code `1` using `process.exit(1)`
+3. Application startup is prevented
+
+#### Example output
+
+```bash
+Environment validation failed:
+- Missing required field: NODE_ENV
+- Missing required field: DEBUG
+- PORT should be a number
+```
+
+#### Example code
+
+```typescript
+import express from 'express';
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+
+// If validation fails, code never reaches here
+const app = express();
+app.listen(env.PORT);
+```
+
+### NestJS mode
+
+Used when calling `validateEnv(schema, config)` with a config object, typically for NestJS integration.
+
+#### Behavior
+
+1. Validation errors are collected
+2. An `Error` is thrown with formatted error messages
+3. NestJS handles the error and prevents module initialization
+
+#### Example error
+
+```typescript
+Error: Environment validation failed:
+- Missing required field: NODE_ENV
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+#### Example code
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from 'env-core';
+
+const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DATABASE_URL: String,
+};
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (config) => validateEnv(envSchema, config),
+    }),
+  ],
+})
+export class AppModule {}
+
+// If validation fails, NestJS catches the error
+// and prevents the application from starting
+```
+
+## Error message format
+
+All validation errors follow a consistent format:
+
+```bash
+Environment validation failed:
+- {error message 1}
+- {error message 2}
+- {error message 3}
+```
+
+- Header: `"Environment validation failed:"`
+- Each error is prefixed with `"- "`
+- Errors are listed in the order they were encountered
+- Multiple errors are collected and reported together
+
+## Common error scenarios
+
+### Scenario 1: Missing .env file
+
+```typescript
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+});
+```
+
+**Error output:**
+```bash
+Environment validation failed:
+- Missing required field: PORT
+- Missing required field: NODE_ENV
+```
+
+**Solution:**
+Create a `.env` file with the required variables:
+```bash
+PORT=3000
+NODE_ENV=development
+```
+
+### Scenario 2: Invalid type values
+
+**.env file:**
+```bash
+PORT=three-thousand
+DEBUG=yes
+```
+
+**Schema:**
+```typescript
+const env = validateEnv({
+  PORT: Number,
+  DEBUG: Boolean,
+});
+```
+
+**Error output:**
+```bash
+Environment validation failed:
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+**Solution:**
+```bash
+PORT=3000
+DEBUG=true
+```
+
+### Scenario 3: Mixed errors
+
+**.env file:**
+```bash
+PORT=abc
+DEBUG=true
+```
+
+**Schema:**
+```typescript
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+```
+
+**Error output:**
+```bash
+Environment validation failed:
+- PORT should be a number
+- Missing required field: NODE_ENV
+```
+
+**Solution:**
+```bash
+PORT=3000
+NODE_ENV=development
+DEBUG=true
+```
+
+## Best practices
+
+### Fail fast on startup
+
+Place `validateEnv` calls at the very beginning of your application to catch configuration errors before any resources are initialized:
+
+```typescript
+// Good: Validate first
+const env = validateEnv(envSchema);
+const app = express();
+const db = connectDatabase(env.DATABASE_URL);
+
+// Bad: May initialize resources before validation
+const app = express();
+const env = validateEnv(envSchema);
+```
+
+### Provide clear variable names
+
+Use descriptive environment variable names to make error messages more helpful:
+
+```typescript
+// Good: Clear and descriptive
+const env = validateEnv({
+  DATABASE_URL: String,
+  SMTP_HOST: String,
+  MAX_FILE_SIZE_MB: Number,
+});
+
+// Less helpful
+const env = validateEnv({
+  DB: String,
+  HOST: String,
+  SIZE: Number,
+});
+```
+
+### Use defaults for optional configuration
+
+Provide sensible defaults to reduce required environment variables:
+
+```typescript
+const env = validateEnv({
+  // Required for production
+  DATABASE_URL: String,
+  
+  // Optional with defaults
+  PORT: { type: Number, default: 3000 },
+  DEBUG: { type: Boolean, default: false },
+  HOST: { type: String, default: '0.0.0.0' },
+});
+```
+
+### Document required variables
+
+Maintain a `.env.example` file with all required variables:
+
+```bash
+# .env.example
+# Copy to .env and fill in values
+
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+
+# Optional
+DEBUG=false
+```
+
+### Test error cases
+
+Write tests to verify error handling:
+
+```typescript
+import { validateEnv } from 'env-core';
+
+test('should throw on missing required field', () => {
+  expect(() => {
+    validateEnv({ PORT: Number }, {});
+  }).toThrow('Missing required field: PORT');
+});
+
+test('should throw on invalid number', () => {
+  expect(() => {
+    validateEnv({ PORT: Number }, { PORT: 'abc' });
+  }).toThrow('PORT should be a number');
+});
+```
+
+## Handling errors programmatically
+
+In NestJS mode, you can catch and handle validation errors:
+
+```typescript
+import { validateEnv } from 'env-core';
+
+try {
+  const env = validateEnv(envSchema, config);
+  return env;
+} catch (error) {
+  if (error instanceof Error && error.message.includes('Environment validation failed')) {
+    // Custom error handling
+    logger.error('Configuration error:', error.message);
+    // Send alert to monitoring service
+    notifyOps(error.message);
+  }
+  throw error;
+}
+```
+
+## Debugging validation issues
+
+### Enable verbose logging
+
+```typescript
+// Log the environment before validation
+console.log('Environment:', process.env);
+
+const env = validateEnv(schema);
+
+// Log validated values
+console.log('Validated env:', env);
+```
+
+### Check loaded values
+
+Verify which environment variables are loaded:
+
+```bash
+# Print all environment variables
+node -e "console.log(process.env)"
+
+# Check specific variable
+node -e "console.log(process.env.PORT)"
+```
+
+### Test with custom env file
+
+Create a test environment file to isolate issues:
+
+```typescript
+// test.env
+PORT=3000
+NODE_ENV=test
+DEBUG=true
+
+// Load test environment
+const env = validateEnv(schema, 'test.env');
+```

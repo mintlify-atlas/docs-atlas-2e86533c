@@ -1,0 +1,258 @@
+---
+title: Validation
+description: Understand how Env Core validates environment variables
+---
+
+# Validation
+
+Env Core validates your environment variables at application startup, ensuring that all required variables are present and have the correct types. This prevents runtime errors caused by misconfiguration.
+
+## How validation works
+
+When you call `validateEnv`, Env Core performs the following steps:
+
+<Steps>
+  <Step title="Load environment variables">
+    Env Core loads variables from your .env file (or custom file) and merges them with `process.env`.
+  </Step>
+
+  <Step title="Validate each variable">
+    For each variable in your schema, Env Core:
+    - Checks if the variable exists
+    - Validates the type matches the schema
+    - Applies default values if specified
+  </Step>
+
+  <Step title="Collect errors">
+    Any validation failures are collected into a list of error messages.
+  </Step>
+
+  <Step title="Return or throw">
+    If validation succeeds, returns the validated environment object. If it fails, displays errors and exits the process.
+  </Step>
+</Steps>
+
+## Validation rules
+
+### Required variables
+
+By default, all variables defined in your schema are required. If a required variable is missing, validation fails.
+
+```javascript
+const schema = {
+  PORT: Number,        // Required
+  NODE_ENV: String,    // Required
+};
+```
+
+If `PORT` or `NODE_ENV` are not set, you'll see:
+
+```yml
+Environment validation failed:
+- Missing required field: PORT
+- Missing required field: NODE_ENV
+```
+
+### Optional variables
+
+Variables become optional when:
+- A `default` value is provided
+- `required: false` is explicitly set
+
+```javascript
+const schema = {
+  DEBUG: { type: Boolean, default: false },     // Optional with default
+  OPTIONAL: { type: String, required: false },  // Optional without default
+};
+```
+
+### Type validation
+
+Env Core validates that environment variables match their declared types:
+
+#### String validation
+
+Strings are always valid - the environment variable value is used as-is.
+
+```javascript
+const schema = { NODE_ENV: String };
+
+// .env file
+// NODE_ENV=production
+
+env.NODE_ENV // "production"
+```
+
+#### Number validation
+
+The value must be convertible to a valid number. Non-numeric values cause validation errors.
+
+```javascript
+const schema = { PORT: Number };
+
+// Valid: PORT=3000
+env.PORT // 3000
+
+// Invalid: PORT=abc
+// Error: PORT should be a number
+```
+
+<Info>
+  Env Core uses JavaScript's `Number()` function for conversion, so values like `"3000"`, `"3.14"`, and `"1e3"` are all valid.
+</Info>
+
+#### Boolean validation
+
+Boolean values must be exactly `"true"` or `"false"` (case-sensitive). Other values cause validation errors.
+
+```javascript
+const schema = { DEBUG: Boolean };
+
+// Valid: DEBUG=true
+env.DEBUG // true
+
+// Valid: DEBUG=false
+env.DEBUG // false
+
+// Invalid: DEBUG=yes, DEBUG=1, DEBUG=on
+// Error: DEBUG should be a boolean
+```
+
+<Warning>
+  Only the strings `"true"` and `"false"` are accepted for boolean values. Values like `"yes"`, `"1"`, `"on"`, `"TRUE"`, or `"False"` will fail validation.
+</Warning>
+
+## Error handling
+
+When validation fails, Env Core provides detailed error messages to help you quickly identify and fix issues.
+
+### Error message format
+
+Errors are displayed in a clear, actionable format:
+
+```yml
+Environment validation failed:
+- Missing required field: NODE_ENV
+- Missing required field: DEBUG
+- PORT should be a number
+```
+
+Each error message indicates:
+- **Missing required field** - A required variable is not set
+- **Should be a [type]** - A variable has the wrong type
+- **Has an unsupported type** - The schema uses an unsupported type
+
+### Process termination
+
+By default, validation failures cause the process to exit with code `1`. This prevents your application from starting with invalid configuration.
+
+```javascript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv(schema);
+// If validation fails, process exits here
+
+console.log('Application started'); // Only runs if validation succeeds
+```
+
+<Info>
+  For NestJS integration, errors are thrown instead of exiting the process, allowing NestJS's error handling to take over.
+</Info>
+
+### Error recovery
+
+There is no error recovery - validation failures are fatal. This is by design:
+
+- **Fail fast** - Catch configuration errors immediately at startup
+- **Prevent runtime errors** - Don't let the application run with invalid config
+- **Clear feedback** - Developers see exactly what needs to be fixed
+
+## Validation in different environments
+
+### Development
+
+In development, validation ensures your .env file has all required variables:
+
+```bash .env
+PORT=3000
+NODE_ENV=development
+DEBUG=true
+```
+
+### Production
+
+In production, validation works with environment variables set by your hosting platform:
+
+```bash
+export PORT=8080
+export NODE_ENV=production
+export DEBUG=false
+```
+
+### Testing
+
+For tests, you can use a custom .env file:
+
+```javascript
+const env = validateEnv(schema, 'test.env');
+```
+
+## Custom validation logic
+
+Env Core focuses on type validation. For complex validation logic (e.g., regex patterns, custom formats), you can add additional checks after validation:
+
+```javascript
+const env = validateEnv(schema);
+
+// Additional validation
+if (env.NODE_ENV !== 'development' && env.NODE_ENV !== 'production') {
+  throw new Error('NODE_ENV must be either development or production');
+}
+
+if (env.PORT < 1024 || env.PORT > 65535) {
+  throw new Error('PORT must be between 1024 and 65535');
+}
+```
+
+## Best practices
+
+<Accordion title="Validate early">
+  Call `validateEnv` at the very start of your application, before any other initialization. This ensures configuration errors are caught before anything else runs.
+</Accordion>
+
+<Accordion title="Use sensible defaults for non-critical config">
+  Provide default values for non-critical configuration to make local development easier. Reserve required variables for critical settings.
+  
+  ```javascript
+  {
+    DATABASE_URL: String,  // Critical - required
+    LOG_LEVEL: { type: String, default: 'info' },  // Non-critical - has default
+  }
+  ```
+</Accordion>
+
+<Accordion title="Keep .env.example updated">
+  Maintain a `.env.example` file showing all required variables with example values. This helps other developers set up their environment.
+</Accordion>
+
+<Accordion title="Document expected values">
+  Use comments in your schema to document what values are acceptable:
+  
+  ```javascript
+  {
+    NODE_ENV: String,  // "development", "production", or "test"
+    LOG_LEVEL: String,  // "debug", "info", "warn", or "error"
+  }
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Type safety" icon="lock" href="/concepts/type-safety">
+    Learn about TypeScript type inference
+  </Card>
+  <Card title="Framework guides" icon="code" href="/guides/express">
+    See validation in action with Express.js and NestJS
+  </Card>
+</CardGroup>

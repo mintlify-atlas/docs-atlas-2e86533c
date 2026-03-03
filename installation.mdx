@@ -1,0 +1,77 @@
+---
+title: Installation
+description: Install Env Core in your Node.js project
+---
+
+# Installation
+
+Env Core can be installed using your favorite package manager. Choose the one you prefer:
+
+<CodeGroup>
+```bash npm
+npm install env-core
+```
+
+```bash yarn
+yarn add env-core
+```
+
+```bash pnpm
+pnpm add env-core
+```
+
+```bash bun
+bun add env-core
+```
+</CodeGroup>
+
+## Requirements
+
+Env Core requires Node.js version 16.0.0 or higher.
+
+<Info>
+  Env Core works with both ESM (`import`) and CommonJS (`require`) module systems.
+</Info>
+
+## Dependencies
+
+Env Core has minimal dependencies:
+
+- **dotenv** - For parsing .env files
+
+No additional configuration is needed - Env Core works out of the box with your existing .env files.
+
+## TypeScript support
+
+If you're using TypeScript, Env Core includes full type definitions. No need to install separate `@types` packages!
+
+```typescript
+import { validateEnv } from 'env-core';
+import type { ValidatedEnv, EnvSchema } from 'env-core';
+```
+
+The library provides complete type inference for your environment variables based on your schema definition.
+
+## Verify installation
+
+You can verify that Env Core is installed correctly by importing it in your project:
+
+<CodeGroup>
+```typescript ESM
+import { validateEnv } from 'env-core';
+
+console.log(typeof validateEnv); // 'function'
+```
+
+```javascript CommonJS
+const { validateEnv } = require('env-core');
+
+console.log(typeof validateEnv); // 'function'
+```
+</CodeGroup>
+
+## Next steps
+
+<Card title="Quick start guide" icon="play" href="/quickstart">
+  Learn how to use Env Core in your project with a step-by-step guide
+</Card>

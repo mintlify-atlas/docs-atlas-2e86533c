@@ -1,0 +1,284 @@
+---
+title: Type safety
+description: Understand TypeScript type inference and type safety in Env Core
+---
+
+# Type safety
+
+One of Env Core's key features is full TypeScript type inference. When you define a schema, TypeScript automatically knows the exact types of your validated environment variables.
+
+## Automatic type inference
+
+Env Core uses TypeScript's type system to infer the correct types from your schema definition:
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+  HOST: { type: String, default: '0.0.0.0' },
+});
+
+// TypeScript knows the exact types:
+env.PORT      // number
+env.NODE_ENV  // string
+env.DEBUG     // boolean
+env.HOST      // string
+```
+
+<Info>
+  No type annotations needed! The `env` object is automatically typed based on your schema.
+</Info>
+
+## How type inference works
+
+Env Core uses TypeScript's advanced type features to transform your schema into precise types:
+
+### Simple type inference
+
+When you use constructor functions directly:
+
+```typescript
+const schema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+};
+
+// Inferred type:
+// {
+//   PORT: number
+//   NODE_ENV: string
+//   DEBUG: boolean
+// }
+```
+
+### Configuration object inference
+
+When you use configuration objects with defaults:
+
+```typescript
+const schema = {
+  DEBUG: { type: Boolean, default: false },
+  PORT: { type: Number, default: 3000 },
+};
+
+// Inferred type:
+// {
+//   DEBUG: boolean
+//   PORT: number
+// }
+```
+
+### Mixed schema inference
+
+Env Core correctly infers types even when mixing approaches:
+
+```typescript
+const schema = {
+  PORT: Number,
+  DEBUG: { type: Boolean, default: false },
+  HOST: { type: String, default: '0.0.0.0' },
+};
+
+// Inferred type:
+// {
+//   PORT: number
+//   DEBUG: boolean
+//   HOST: string
+// }
+```
+
+## The ValidatedEnv type
+
+Env Core exports a `ValidatedEnv` type that you can use for type annotations:
+
+```typescript
+import { validateEnv, type ValidatedEnv, type EnvSchema } from 'env-core';
+
+const schema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+} satisfies EnvSchema;
+
+type Env = ValidatedEnv<typeof schema>;
+// {
+//   PORT: number
+//   NODE_ENV: string
+//   DEBUG: boolean
+// }
+
+const env: Env = validateEnv(schema);
+```
+
+<Tip>
+  Use `satisfies EnvSchema` to ensure your schema is valid while preserving its specific type for inference.
+</Tip>
+
+## Type safety benefits
+
+TypeScript's type inference provides several benefits:
+
+### Autocomplete
+
+Your IDE knows which environment variables are available:
+
+```typescript
+const env = validateEnv(schema);
+
+env. // IDE shows: PORT, NODE_ENV, DEBUG, HOST
+```
+
+### Type checking
+
+TypeScript prevents type errors at compile time:
+
+```typescript
+const env = validateEnv({
+  PORT: Number,
+  DEBUG: Boolean,
+});
+
+// ✅ Valid
+const port: number = env.PORT;
+const isDebug: boolean = env.DEBUG;
+
+// ❌ TypeScript error: Type 'number' is not assignable to type 'string'
+const port: string = env.PORT;
+
+// ❌ TypeScript error: Property 'INVALID' does not exist
+const invalid = env.INVALID;
+```
+
+### Refactoring safety
+
+When you change your schema, TypeScript helps you find all affected code:
+
+```typescript
+// Before
+const schema = {
+  PORT: Number,
+};
+
+// After - renamed to SERVER_PORT
+const schema = {
+  SERVER_PORT: Number,
+};
+
+// TypeScript will flag all uses of `env.PORT` as errors
+```
+
+## Using types in your application
+
+You can export the validated environment type for use throughout your application:
+
+```typescript env.ts
+import { validateEnv, type ValidatedEnv } from 'env-core';
+
+export const envSchema = {
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: { type: Boolean, default: false },
+  HOST: { type: String, default: '0.0.0.0' },
+} as const;
+
+export const env = validateEnv(envSchema);
+export type Env = ValidatedEnv<typeof envSchema>;
+```
+
+```typescript server.ts
+import { env, type Env } from './env';
+
+function startServer(config: Env) {
+  console.log(`Starting server on ${config.HOST}:${config.PORT}`);
+}
+
+startServer(env);
+```
+
+## Type inference internals
+
+For the curious, here's how Env Core's type system works:
+
+```typescript
+// From src/types.ts
+
+type SchemaType = typeof String | typeof Number | typeof Boolean;
+
+type InferSchemaType<T> = 
+  T extends typeof String ? string :
+  T extends typeof Number ? number :
+  T extends typeof Boolean ? boolean :
+  never;
+
+type InferType<T> = 
+  T extends SchemaType ? InferSchemaType<T> :
+  T extends EnvSchemaItem<infer U> ? U :
+  never;
+
+type ValidatedEnv<T extends EnvSchema> = {
+  [K in keyof T]: InferType<T[K]>
+};
+```
+
+This type system:
+1. Maps constructor functions to their corresponding TypeScript types
+2. Extracts types from configuration objects
+3. Transforms the schema object into the validated environment type
+
+## Best practices
+
+<Accordion title="Use `as const` for schema objects">
+  Using `as const` preserves the specific types of your schema:
+  
+  ```typescript
+  const schema = {
+    PORT: Number,
+    NODE_ENV: String,
+  } as const;
+  ```
+</Accordion>
+
+<Accordion title="Export your environment type">
+  Export the validated environment type so other parts of your application can use it:
+  
+  ```typescript
+  export type Env = ValidatedEnv<typeof envSchema>;
+  ```
+</Accordion>
+
+<Accordion title="Use satisfies for type checking">
+  Use `satisfies EnvSchema` to validate your schema while preserving specific types:
+  
+  ```typescript
+  const schema = {
+    PORT: Number,
+  } satisfies EnvSchema;
+  ```
+</Accordion>
+
+<Accordion title="Avoid runtime type assertions">
+  Trust Env Core's validation - you don't need runtime type assertions:
+  
+  ```typescript
+  // ❌ Unnecessary
+  const port = env.PORT as number;
+  
+  // ✅ TypeScript already knows it's a number
+  const port = env.PORT;
+  ```
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Express.js guide" icon="code" href="/guides/express">
+    See type-safe environment validation in an Express.js app
+  </Card>
+  <Card title="NestJS guide" icon="code" href="/guides/nestjs">
+    Learn how to use Env Core with NestJS
+  </Card>
+</CardGroup>

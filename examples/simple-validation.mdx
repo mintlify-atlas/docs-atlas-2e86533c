@@ -1,0 +1,327 @@
+---
+title: Simple validation
+description: Basic environment variable validation examples
+---
+
+# Simple validation
+
+This guide demonstrates simple environment variable validation patterns using Env Core.
+
+## Basic required variables
+
+The simplest use case - all variables are required with specific types:
+
+```javascript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+  HOST: String,
+});
+
+console.log(env.PORT);      // number
+console.log(env.NODE_ENV);  // string
+console.log(env.DEBUG);     // boolean
+console.log(env.HOST);      // string
+```
+
+With this .env file:
+
+```bash .env
+PORT=3000
+NODE_ENV=development
+DEBUG=true
+HOST=localhost
+```
+
+## String variables
+
+String variables are the simplest - any value is accepted:
+
+```javascript
+const env = validateEnv({
+  NODE_ENV: String,
+  DATABASE_URL: String,
+  API_KEY: String,
+  LOG_LEVEL: String,
+});
+```
+
+```bash .env
+NODE_ENV=production
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+API_KEY=sk_test_1234567890abcdef
+LOG_LEVEL=info
+```
+
+<Info>
+  String variables can contain any characters - URLs, JSON, multiline text, etc.
+</Info>
+
+## Number variables
+
+Number variables must be valid numeric values:
+
+```javascript
+const env = validateEnv({
+  PORT: Number,
+  MAX_CONNECTIONS: Number,
+  TIMEOUT_MS: Number,
+  RATE_LIMIT: Number,
+});
+```
+
+```bash .env
+PORT=3000
+MAX_CONNECTIONS=100
+TIMEOUT_MS=5000
+RATE_LIMIT=60
+```
+
+Valid number formats:
+- Integers: `3000`, `100`, `42`
+- Decimals: `3.14`, `0.5`, `2.718`
+- Scientific notation: `1e3`, `2.5e-4`
+
+<Warning>
+  Non-numeric values like `"abc"`, `"3000px"`, or `""` will cause validation to fail.
+</Warning>
+
+## Boolean variables
+
+Boolean variables must be exactly `"true"` or `"false"` (case-sensitive):
+
+```javascript
+const env = validateEnv({
+  DEBUG: Boolean,
+  ENABLE_LOGGING: Boolean,
+  USE_SSL: Boolean,
+  MAINTENANCE_MODE: Boolean,
+});
+```
+
+```bash .env
+DEBUG=true
+ENABLE_LOGGING=true
+USE_SSL=false
+MAINTENANCE_MODE=false
+```
+
+<Warning>
+  Only `"true"` and `"false"` are accepted. Values like `"yes"`, `"no"`, `"1"`, `"0"`, `"TRUE"`, or `"False"` will fail validation.
+</Warning>
+
+## Mixed types
+
+Most applications need a mix of different types:
+
+```javascript
+const env = validateEnv({
+  // Server config
+  PORT: Number,
+  HOST: String,
+  
+  // Environment
+  NODE_ENV: String,
+  
+  // Database
+  DATABASE_URL: String,
+  DB_POOL_SIZE: Number,
+  
+  // Features
+  DEBUG: Boolean,
+  ENABLE_CACHING: Boolean,
+  
+  // External services
+  API_KEY: String,
+  API_TIMEOUT_MS: Number,
+});
+```
+
+```bash .env
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=development
+DATABASE_URL=postgresql://localhost/myapp
+DB_POOL_SIZE=10
+DEBUG=true
+ENABLE_CACHING=false
+API_KEY=secret_key_123
+API_TIMEOUT_MS=5000
+```
+
+## Validation success
+
+When all variables are present and valid, `validateEnv` returns a typed object:
+
+```javascript
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+
+// All variables are available with correct types
+console.log(typeof env.PORT);      // "number"
+console.log(typeof env.NODE_ENV);  // "string"
+console.log(typeof env.DEBUG);     // "boolean"
+
+// Use them in your application
+if (env.DEBUG) {
+  console.log(`Server starting on port ${env.PORT}`);
+}
+```
+
+## Validation failure examples
+
+Here are common validation failures and their error messages:
+
+### Missing required variable
+
+```javascript
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+});
+```
+
+With incomplete .env:
+```bash .env
+PORT=3000
+# NODE_ENV is missing
+```
+
+Error:
+```yml
+Environment validation failed:
+- Missing required field: NODE_ENV
+```
+
+### Invalid type
+
+```javascript
+const env = validateEnv({
+  PORT: Number,
+});
+```
+
+With invalid .env:
+```bash .env
+PORT=not_a_number
+```
+
+Error:
+```yml
+Environment validation failed:
+- PORT should be a number
+```
+
+### Multiple errors
+
+```javascript
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+```
+
+With invalid .env:
+```bash .env
+PORT=abc
+# NODE_ENV is missing
+DEBUG=yes
+```
+
+Error:
+```yml
+Environment validation failed:
+- Missing required field: NODE_ENV
+- PORT should be a number
+- DEBUG should be a boolean
+```
+
+## Complete example
+
+Here's a complete example for a simple web application:
+
+```javascript config/env.js
+import { validateEnv } from 'env-core';
+
+export const envSchema = {
+  // Server
+  PORT: Number,
+  HOST: String,
+  
+  // Environment
+  NODE_ENV: String,
+  
+  // Database
+  DATABASE_URL: String,
+  
+  // Features
+  DEBUG: Boolean,
+};
+
+export const env = validateEnv(envSchema);
+```
+
+```bash .env
+PORT=3000
+HOST=localhost
+NODE_ENV=development
+DATABASE_URL=postgresql://localhost/myapp
+DEBUG=true
+```
+
+```javascript index.js
+import { env } from './config/env.js';
+
+console.log('Environment validated successfully!');
+console.log(`Server: ${env.HOST}:${env.PORT}`);
+console.log(`Environment: ${env.NODE_ENV}`);
+console.log(`Debug mode: ${env.DEBUG}`);
+console.log(`Database: ${env.DATABASE_URL}`);
+```
+
+## TypeScript example
+
+In TypeScript, you get full type inference:
+
+```typescript
+import { validateEnv } from 'env-core';
+
+const env = validateEnv({
+  PORT: Number,
+  NODE_ENV: String,
+  DEBUG: Boolean,
+});
+
+// TypeScript knows the exact types
+const port: number = env.PORT;      // ✅ Valid
+const env: string = env.NODE_ENV;   // ✅ Valid
+const debug: boolean = env.DEBUG;   // ✅ Valid
+
+// Type errors are caught at compile time
+const port: string = env.PORT;      // ❌ Error: Type 'number' is not assignable to type 'string'
+const invalid = env.INVALID;        // ❌ Error: Property 'INVALID' does not exist
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Advanced configuration" icon="sliders" href="/examples/advanced-configuration">
+    Learn about default values and optional variables
+  </Card>
+  <Card title="Custom env files" icon="file" href="/examples/custom-env-files">
+    Use different .env files for different environments
+  </Card>
+  <Card title="Validation concepts" icon="shield-check" href="/concepts/validation">
+    Deep dive into how validation works
+  </Card>
+  <Card title="Type safety" icon="lock" href="/concepts/type-safety">
+    Understand TypeScript type inference
+  </Card>
+</CardGroup>
