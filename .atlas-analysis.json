@@ -1,0 +1,90 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Env Core",
+  "projectDescription": "Type-safe environment variable validation library for Node.js applications",
+  "theme": "palm",
+  "primaryColor": "#10b981",
+  "lightColor": "#34d399",
+  "darkColor": "#059669",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/schema-definition",
+              "concepts/validation",
+              "concepts/type-safety"
+            ]
+          },
+          {
+            "group": "Framework Guides",
+            "pages": [
+              "guides/express",
+              "guides/nestjs",
+              "guides/general-nodejs"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/simple-validation",
+              "examples/advanced-configuration",
+              "examples/custom-env-files"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Functions",
+            "pages": [
+              "api/validate-env"
+            ]
+          },
+          {
+            "group": "Type System",
+            "pages": [
+              "api/types",
+              "api/schema-types"
+            ]
+          },
+          {
+            "group": "Error Handling",
+            "pages": [
+              "api/errors"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Type-safe environment variable validation",
+    "Support for String, Number, and Boolean types",
+    "Optional variables with default values",
+    "Detailed validation error messages",
+    "Express.js and NestJS integration",
+    "Zero dependencies (except dotenv)"
+  ],
+  "publicApiSurface": [
+    "validateEnv<T>(schema: T, envFile?: string): ValidatedEnv<T>",
+    "validateEnv<T>(schema: T, config: Record<string, any>, envFile?: string): ValidatedEnv<T>",
+    "EnvSchema",
+    "EnvSchemaItem<T>",
+    "ValidatedEnv<T>",
+    "SchemaType"
+  ]
+}
